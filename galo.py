@@ -364,35 +364,42 @@ import pygad
 #
 depth = 8
 ancillas = 4
+modes = 4 + ancillas
+
 num_generations = 2000
-num_parents_mating = 10
-sol_per_pop = 20
+num_parents_mating = 20
+sol_per_pop = 100
 num_genes = modes * depth + ancillas * 2
 
 init_range_low = 0
 init_range_high = 90
 
-parent_selection_type = "tournament"
-keep_parents = 1
+parent_selection_type = "sss"
+keep_parents = 20
 
-crossover_type = "single_point"
+crossover_type = "uniform"
 
 mutation_type = "random"
-mutation_percent_genes = 30
-
-
-modes = 4 + ancillas
+mutation_num_genes = 1
+mutation_probability = 0.6
 
 def fitness_func(solution, solution_idx):
     res = get_fidelity(solution, modes, depth, ancillas)
-    return np.exp(res[1])*res[0]
-
-fitness_function = fitness_func
-
+    if res[0] < 0.0625:
+        return res[0]
+    return 100 * res[1]
+def on_generation(ga_instance):
+    print("Generation = {generation}".format(generation=ga_instance.generations_completed))
+    solution, solution_fitness, solution_idx = ga_instance.best_solution()
+    print("Best solution:")
+    ConstructCircuitMatrix(solution, modes, depth, ancillas, to_print = True)
+    res = get_fidelity(solution, modes, depth, ancillas)
+    print("Fitness: probability={prob}, fidelity={fid}".format(prob=res[0], fid=res[1]))
 
 ga_instance = pygad.GA(num_generations=num_generations,
                        num_parents_mating=num_parents_mating,
-                       fitness_func=fitness_function,
+                       fitness_func=fitness_func,
+                       on_generation=on_generation,
                        sol_per_pop=sol_per_pop,
                        num_genes=num_genes,
                        init_range_low=init_range_low,
@@ -402,8 +409,12 @@ ga_instance = pygad.GA(num_generations=num_generations,
                        gene_type=int,
                        crossover_type=crossover_type,
                        mutation_type=mutation_type,
-                       #stop_criteria=["reach_99", "saturate_1000"],
-                       mutation_percent_genes=mutation_percent_genes,
+                       mutation_num_genes=mutation_num_genes,
+                       mutation_probability=mutation_probability,
+                       mutation_by_replacement=True,
+                       random_mutation_min_val=init_range_low,
+                       random_mutation_max_val=init_range_high,
+                       stop_criteria=["reach_99"],
                        parallel_processing=None)
 t1 = datetime.now()
 ga_instance.run()
@@ -418,7 +429,3 @@ ConstructCircuitMatrix(solution, modes, depth, ancillas, to_print = True)
 res = get_fidelity(solution, modes, depth, ancillas)
 print("Fitness: probability={prob}, fidelity={fid}".format(prob=res[0], fid=res[1]))
 ga_instance.plot_fitness()
-
-
-
-
