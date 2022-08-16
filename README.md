@@ -18,24 +18,3 @@ ancillas = 4
 
 other constants - read the PyGAD guide : https://pygad.readthedocs.io/en/latest/README_pygad_ReadTheDocs.html
 
-num_generations = 2000
-
-num_parents_mating = 10
-
-sol_per_pop = 20
-
-num_genes = modes * depth + ancillas * 2
-
-init_range_low = 0
-
-init_range_high = 90
-
-parent_selection_type = "tournament"
-
-keep_parents = 1
-
-crossover_type = "single_point"
-
-mutation_type = "random"
-
-mutation_percent_genes = 30
