@@ -367,27 +367,27 @@ ancillas = 4
 modes = 4 + ancillas
 
 num_generations = 2000
-num_parents_mating = 20
-sol_per_pop = 100
+num_parents_mating = 800
+sol_per_pop = 5000
 num_genes = modes * depth + ancillas * 2
 
 init_range_low = 0
 init_range_high = 90
 
 parent_selection_type = "sss"
-keep_parents = 20
+keep_parents = num_parents_mating
 
 crossover_type = "uniform"
 
 mutation_type = "random"
-mutation_num_genes = 1
+mutation_num_genes = 16
 mutation_probability = 0.6
 
 def fitness_func(solution, solution_idx):
     res = get_fidelity(solution, modes, depth, ancillas)
     if res[0] < 0.0625:
         return res[0]
-    return 100 * res[1]
+    return 1000 * res[1]
 def on_generation(ga_instance):
     print("Generation = {generation}".format(generation=ga_instance.generations_completed))
     solution, solution_fitness, solution_idx = ga_instance.best_solution()
@@ -414,7 +414,7 @@ ga_instance = pygad.GA(num_generations=num_generations,
                        mutation_by_replacement=True,
                        random_mutation_min_val=init_range_low,
                        random_mutation_max_val=init_range_high,
-                       stop_criteria=["reach_99"],
+                       stop_criteria=["reach_999"],
                        parallel_processing=None)
 t1 = datetime.now()
 ga_instance.run()
