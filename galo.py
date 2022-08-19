@@ -381,7 +381,7 @@ keep_parents = num_parents_mating
 crossover_type = "single_point"
 
 mutation_type = "random"
-mutation_num_genes = num_genes / 4
+mutation_num_genes = int(num_genes / 4)
 mutation_probability = 0.5
 
 t1 = datetime.now()
@@ -424,7 +424,7 @@ ga_instance = pygad.GA(num_generations=num_generations,
                        random_mutation_min_val=init_range_low,
                        random_mutation_max_val=init_range_high,
                        stop_criteria=["reach_999"],
-                       parallel_processing=None,
+                       parallel_processing=['process', 10],
                        save_best_solutions=True,
                        save_solutions=True)
 
