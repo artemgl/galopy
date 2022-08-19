@@ -91,7 +91,7 @@ def ConstructCircuitMatrix(genome, modes, steps, ancillas, to_print = False):
             dev = genome[4*i] % len(device_set)
             if dev == 0:
                 continue 
-            if dev == 1:
+            else:
                 mode1 = genome[4*i + 2] % modes
                 mode2 = genome[4*i + 3] % modes
                 if mode1 == mode2:
@@ -102,14 +102,15 @@ def ConstructCircuitMatrix(genome, modes, steps, ancillas, to_print = False):
                 else:
                     circuit.append(BS(np.radians(float(theta)), 0, mode1, mode2, modes))
                 continue 
-            if dev == 2:
-                mode1 = genome[4*i + 2] % modes
-                theta = genome[4*i + 1] % 90
-                if to_print:
-                    print("PS({mode1}), theta={theta}".format(mode1=mode1, theta=theta))
-                else:
-                    circuit.append(PS(np.radians(float(theta)), mode1, modes))
-                continue 
+            # no use, better increase the probability of BS
+            #if dev == 2:
+            #    mode1 = genome[4*i + 2] % modes
+            #    theta = genome[4*i + 1] % 90
+            #    if to_print:
+            #        print("PS({mode1}), theta={theta}".format(mode1=mode1, theta=theta))
+            #    else:
+            #        circuit.append(PS(np.radians(float(theta)), mode1, modes))
+            #    continue 
 
         if to_print:
             for i in range(ancillas):
@@ -362,7 +363,7 @@ import pygad
 #  num_generations - number of GA generations
 #  other constants - read the PyGAD guide : https://pygad.readthedocs.io/en/latest/README_pygad_ReadTheDocs.html
 #
-depth = 8
+depth = 10
 ancillas = 4
 modes = 4 + ancillas
 
@@ -377,11 +378,13 @@ init_range_high = 90
 parent_selection_type = "sss"
 keep_parents = num_parents_mating
 
-crossover_type = "uniform"
+crossover_type = "single_point"
 
 mutation_type = "random"
-mutation_num_genes = 40
+mutation_num_genes = num_genes / 4
 mutation_probability = 0.5
+
+t1 = datetime.now()
 
 def fitness_func(solution, solution_idx):
     res = get_fidelity(solution, modes, depth, ancillas)
@@ -389,12 +392,18 @@ def fitness_func(solution, solution_idx):
         return res[0]
     return 1000 * res[1]
 def on_generation(ga_instance):
+    t2 = datetime.now()
+    delta = t2 - t1
+    print(f"Time consumed: {delta.total_seconds()} seconds")
     print("Generation = {generation}".format(generation=ga_instance.generations_completed))
     solution, solution_fitness, solution_idx = ga_instance.best_solution()
     print("Best solution:")
     ConstructCircuitMatrix(solution, modes, depth, ancillas, to_print = True)
     res = get_fidelity(solution, modes, depth, ancillas)
     print("Fitness: probability={prob}, fidelity={fid}".format(prob=res[0], fid=res[1]))
+    t2 = datetime.now()
+    delta = t2 - t1
+    print(f"Time consumed: {delta.total_seconds()} seconds")
 
 ga_instance = pygad.GA(num_generations=num_generations,
                        num_parents_mating=num_parents_mating,
@@ -415,8 +424,10 @@ ga_instance = pygad.GA(num_generations=num_generations,
                        random_mutation_min_val=init_range_low,
                        random_mutation_max_val=init_range_high,
                        stop_criteria=["reach_999"],
-                       parallel_processing=["process", 10])
-t1 = datetime.now()
+                       parallel_processing=None,
+                       save_best_solutions=True,
+                       save_solutions=True)
+
 ga_instance.run()
 t2 = datetime.now()
 delta = t2 - t1
