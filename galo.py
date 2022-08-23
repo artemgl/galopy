@@ -96,7 +96,7 @@ def ConstructCircuitMatrix(genome, modes, steps, ancillas, to_print = False):
                 mode2 = genome[4*i + 3] % modes
                 if mode1 == mode2:
                     mode2 = (mode1 + 1) % modes
-                theta = genome[4*i + 1] % 90
+                theta = float(genome[4*i + 1] % 900) / 10
                 if to_print:
                     print("BS({mode1},{mode2}), theta={theta}".format(mode1=mode1, mode2=mode2, theta=theta))
                 else:
@@ -363,8 +363,8 @@ import pygad
 #  num_generations - number of GA generations
 #  other constants - read the PyGAD guide : https://pygad.readthedocs.io/en/latest/README_pygad_ReadTheDocs.html
 #
-depth = 10
-ancillas = 4
+depth = 4
+ancillas = 3
 modes = 4 + ancillas
 
 num_generations = 2000
@@ -373,7 +373,7 @@ sol_per_pop = 5000
 num_genes = 4 * depth + 2 * ancillas
 
 init_range_low = 0
-init_range_high = 90
+init_range_high = 900
 
 parent_selection_type = "sss"
 keep_parents = num_parents_mating
@@ -388,7 +388,7 @@ t1 = datetime.now()
 
 def fitness_func(solution, solution_idx):
     res = get_fidelity(solution, modes, depth, ancillas)
-    if res[0] < 0.0625:
+    if res[0] < 0.10:
         return res[0]
     return 1000 * res[1]
 def on_generation(ga_instance):
@@ -424,7 +424,7 @@ ga_instance = pygad.GA(num_generations=num_generations,
                        random_mutation_min_val=init_range_low,
                        random_mutation_max_val=init_range_high,
                        stop_criteria=["reach_999"],
-                       parallel_processing=['process', 10],
+                       parallel_processing=['process', 6],
                        save_best_solutions=True,
                        save_solutions=True)
 
