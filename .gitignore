@@ -1,2 +1,6 @@
 __pycache__/
+venv
+.idea
+.pytest_cache
+
 galopy.jpg
