@@ -46,15 +46,35 @@ class GeneticAlgorithm(ABC):
 
         self._max_success_measurements = max_success_measurements
 
-    # TODO: modes can be equal, needs normalization
-    # TODO: rearrange parameters to faster access them
     def __normalize_coeffs(self, population):
-        """Bring the data to a convenient form."""
-        population[:, :5 * self._depth:5] %= 36000
-        population[:, 1:5 * self._depth:5] %= 9000  # Not continious in case of mutations
-        population[:, 2:5 * self._depth:5] %= 36000
-        population[:, 3:5 * self._depth:5] %= self._n_modes
-        population[:, 4:5 * self._depth:5] %= self._n_modes
+        """
+        Bring the data to a convenient form.
+
+        First self._depth of parameters are angles for the first rz rotation.
+
+        Next self._depth are angles for the second rz rotation.
+
+        Next self._depth are angles for ry rotation.
+
+        Next 2 * self._depth are pairs of modes on which local unitary is performed.
+
+        Next one is the number of measurements.
+
+        Next self._n_ancilla_photons are initial state for ancilla photons.
+
+        The last are results of measurements.
+        """
+        population[:, 0:2 * self._depth] %= 36000
+        population[:, 2 * self._depth:3 * self._depth] %= 9000  # Not continious in case of mutations
+
+        population[:, 3 * self._depth:5 * self._depth] %= self._n_work_modes
+        # If modes are equal, increment the second one
+        x = population[:, 3 * self._depth:5 * self._depth:2]
+        y = population[:, 3 * self._depth + 1:5 * self._depth:2]
+        mask = y == x
+        y[mask] += 1
+        y[mask] %= self._n_work_modes
+
         population[:, 5 * self._depth] %= self._max_success_measurements
         population[:, 5 * self._depth + 1:] %= self._n_ancilla_modes
 
@@ -65,9 +85,12 @@ class GeneticAlgorithm(ABC):
 
     def __gen_random_population(self, n_parents: int):
         """Create a random initial population made of n_parents."""
-        res = torch.randint(-18000, 18000,
-                            (n_parents, 5 * self._depth + 1 + self._n_ancilla_photons *
-                             (self._max_success_measurements + 1)),
+        res = torch.randint(0, 36000,
+                            (n_parents,
+                             5 * self._depth +  # 3 angles and 2 modes for each one
+                             1 +  # Number of measurements
+                             self._n_ancilla_photons * (1 +  # for initial state of ancilla photons
+                                                        self._max_success_measurements)),  # results of measurements
                             device=self._device, dtype=torch.int)
 
         return self.__normalize_coeffs(res)
@@ -78,10 +101,10 @@ class GeneticAlgorithm(ABC):
             """Convert multi-dimensional index to one-dimensional."""
             res = 0
             for mode in modes:
-                res = res * self._n_work_modes + mode
+                res = res * self._n_modes + mode
             return res
 
-        args = [list(range(self._n_work_modes))] * self._n_photons
+        args = [list(range(self._n_modes))] * self._n_photons
         indices = [list(i) for i in product(*args)]
 
         normalized_indices = [idx.copy() for idx in indices]

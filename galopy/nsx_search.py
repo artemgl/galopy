@@ -1,4 +1,4 @@
-from genetic_algorithm import *
+from galopy.genetic_algorithm import *
 
 
 class NSxSearch(GeneticAlgorithm):
@@ -20,11 +20,11 @@ class NSxSearch(GeneticAlgorithm):
         indices = torch.tensor([[i] * self._n_ancilla_photons for i in range(state_vector.shape[0])],
                                device=self._device).t()
         ancilla_idx = [ancilla_photons[:, i].long() for i in range(self._n_ancilla_photons)]
-        idx = [indices] + ancilla_idx + [self._n_work_modes - 1, self._n_work_modes - 1]
+        idx = [indices] + ancilla_idx + [self._n_modes - 1, self._n_modes - 1]
         state_vector[idx] = 1.
-        idx = [indices] + ancilla_idx + [self._n_work_modes - 2, self._n_work_modes - 1]
+        idx = [indices] + ancilla_idx + [self._n_modes - 2, self._n_modes - 1]
         state_vector[idx] = 1.
-        idx = [indices] + ancilla_idx + [self._n_work_modes - 2, self._n_work_modes - 2]
+        idx = [indices] + ancilla_idx + [self._n_modes - 2, self._n_modes - 2]
         state_vector[idx] = 1.
 
         return state_vector
