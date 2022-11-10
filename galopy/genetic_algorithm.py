@@ -170,6 +170,7 @@ class GeneticAlgorithm(ABC):
 
     @abstractmethod
     def _fill_state(self, population, state_vector):
+        """Assign the initial state in Dirac form."""
         pass
 
     def __calculate_state(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
