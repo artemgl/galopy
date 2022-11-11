@@ -4,6 +4,7 @@ from itertools import product
 from abc import ABC, abstractmethod
 
 # Multiply to get angle in radians from int
+# TODO: move it out of here
 RADIANS = pi / 18000.
 
 
@@ -78,8 +79,9 @@ class GeneticAlgorithm(ABC):
         population[:, 5 * self._depth] %= self._max_success_measurements
         population[:, 5 * self._depth + 1:] %= self._n_ancilla_modes
 
-        modes, _ = population[:, 5 * self._depth + 1:].reshape(population.shape[0], -1, self._n_ancilla_photons).sort()
-        population[:, 5 * self._depth + 1:] = modes.reshape(population.shape[0], -1)
+        if self._n_ancilla_photons > 0:
+            modes, _ = population[:, 5 * self._depth + 1:].reshape(population.shape[0], -1, self._n_ancilla_photons).sort()
+            population[:, 5 * self._depth + 1:] = modes.reshape(population.shape[0], -1)
 
         return population
 
@@ -143,16 +145,16 @@ class GeneticAlgorithm(ABC):
         """Read genome and return the unitary transformation of the scheme it represents."""
         # Masks to get indices of modes
         # TODO: Move to outer scope
-        mask_modes_2 = torch.tensor([[5 * i + 3,
-                                      5 * i + 3,
-                                      5 * i + 4,
-                                      5 * i + 4]
-                                     for i in range(self._depth)], device=self._device)
-        mask_modes_3 = torch.tensor([[5 * i + 3,
-                                      5 * i + 4,
-                                      5 * i + 3,
-                                      5 * i + 4]
-                                     for i in range(self._depth)], device=self._device)
+        mask_modes_2 = torch.tensor([[3 * self._depth + 2 * i,
+                                      3 * self._depth + 2 * i,
+                                      3 * self._depth + 2 * i + 1,
+                                      3 * self._depth + 2 * i + 1]
+                                     for i in range(self._depth)], dtype=torch.long, device=self._device)
+        mask_modes_3 = torch.tensor([[3 * self._depth + 2 * i,
+                                      3 * self._depth + 2 * i + 1,
+                                      3 * self._depth + 2 * i,
+                                      3 * self._depth + 2 * i + 1]
+                                     for i in range(self._depth)], dtype=torch.long, device=self._device)
         # Indices to slice correctly
         # TODO: Move to outer scope
         indices_0 = torch.tensor([[i] * 4 * self._depth for i in range(population.shape[0])], device=self._device)\
@@ -163,10 +165,9 @@ class GeneticAlgorithm(ABC):
         indices_3 = population[:, mask_modes_3]
 
         # Get angles
-        operators = population[:, :5 * self._depth]
-        phies = operators[:, ::5]
-        thetas = operators[:, 1::5]
-        lambdas = operators[:, 2::5]
+        phies = population[:, 0:self._depth]
+        thetas = population[:, 2 * self._depth:3 * self._depth]
+        lambdas = population[:, self._depth:2 * self._depth]
 
         # Write unitary coefficients for each triple of angles
         unitaries_coeffs = torch.zeros(population.shape[0], self._depth, 4, device=self._device, dtype=torch.complex64)
@@ -177,10 +178,10 @@ class GeneticAlgorithm(ABC):
         unitaries_coeffs[:, :, 2] *= torch.exp(1.j * lambdas * RADIANS)
 
         # Create an unitary for each triple of angles
-        unitaries = torch.zeros(population.shape[0], self._depth, self._n_work_modes, self._n_work_modes,
+        unitaries = torch.zeros(population.shape[0], self._depth, self._n_modes, self._n_modes,
                                 device=self._device, dtype=torch.complex64)
         # TODO: Move mask to outer scope
-        mask = torch.eye(self._n_work_modes, device=self._device, dtype=torch.bool)
+        mask = torch.eye(self._n_modes, device=self._device, dtype=torch.bool)
         unitaries[:, :, mask] = 1.
         unitaries[indices_0.long(), indices_1.long(), indices_2.long(), indices_3.long()] = unitaries_coeffs
 
@@ -201,8 +202,8 @@ class GeneticAlgorithm(ABC):
         # TODO: move size and size_mtx to outer scope ?
         # TODO: create state_vector once at the beginning ?
         # Create state vector in operator form
-        size = [population.shape[0]] + [self._n_work_modes] * self._n_photons + [1]
-        size_mtx = [population.shape[0]] + [1] * (self._n_photons - 1) + [self._n_work_modes] * 2
+        size = [population.shape[0]] + [self._n_modes] * self._n_photons + [1]
+        size_mtx = [population.shape[0]] + [1] * (self._n_photons - 1) + [self._n_modes] * 2
         state_vector = torch.zeros(*size, device=self._device, dtype=torch.complex64)
 
         # TODO: create vector in method __fill_state()
@@ -221,6 +222,7 @@ class GeneticAlgorithm(ABC):
 
         # Apply unitaries to all photons in state
         state_vector = unitaries.matmul(state_vector)
+        # TODO: matrix reshape instead of vector transposing ?
         # TODO: Optimize? (Maybe firstly have sparse vector, then convert it to dense before some iteration)
         for i in range(1, self._n_photons):
             state_vector.transpose_(i, self._n_photons)

@@ -2,7 +2,7 @@ import unittest
 from galopy.nsx_search import *
 
 
-# TODO: add more tests
+# TODO: add more tests !!! Zero depth is not allowed
 class NormalizeCoeffs(unittest.TestCase):
     def test(self):
 
@@ -14,6 +14,7 @@ class NormalizeCoeffs(unittest.TestCase):
                                  [ 8668, 7438, 7630, 2, 0, 0,  0,  1],
                                  [ 5540, 8659, 4154, 0, 1, 0,  0,  1]], requires_grad=False)
 
+        # TODO: use special test class instead of NSxSearch
         search = NSxSearch('cpu', depth=1, n_ancilla_modes=2, n_ancilla_photons=2, max_success_measurements=1)
         actual = search._GeneticAlgorithm__normalize_coeffs(initial)
 
