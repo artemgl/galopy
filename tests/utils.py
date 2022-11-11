@@ -63,8 +63,8 @@ def run_circuit(input, matrix, dim):
 #  |000122> -> {0: 3, 1: 1, 2: 2}
 #  [mode_number_0, mode_number_1, ...] -> 0: photon_count, 1: photon_count, ...
 #
-def photons_to_modes(index, n_ancilla_modes):
-    res = {i: 0 for i in range(n_ancilla_modes)}
+def photons_to_modes(index, n_modes):
+    res = {i: 0 for i in range(n_modes)}
     for i in index:
         res[i] += 1
     return res

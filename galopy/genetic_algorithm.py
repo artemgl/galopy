@@ -197,6 +197,7 @@ class GeneticAlgorithm(ABC):
         """Assign the initial state in Dirac form."""
         pass
 
+    # TODO: move args to private fields
     def __calculate_state(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
         """Express initial state in terms of output birth operators and transform to Dirac form."""
         # TODO: move size and size_mtx to outer scope ?

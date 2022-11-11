@@ -1,6 +1,8 @@
 import unittest
 from math import sqrt
 from galopy.genetic_algorithm import *
+import random
+from tests.utils import *
 
 
 class TestGeneticAlgorithm(GeneticAlgorithm):
@@ -11,7 +13,7 @@ class TestGeneticAlgorithm(GeneticAlgorithm):
         indices = torch.tensor([[i] * self._n_ancilla_photons for i in range(state_vector.shape[0])],
                                device=self._device).t()
         ancilla_idx = [ancilla_photons[:, i].long() for i in range(self._n_ancilla_photons)]
-        idx = [indices] + ancilla_idx + [self._n_modes - 1]
+        idx = [indices] + ancilla_idx
         state_vector[idx] = 1.
 
         return state_vector
@@ -21,44 +23,61 @@ class TestGeneticAlgorithm(GeneticAlgorithm):
 
 
 class CalculateState(unittest.TestCase):
+
+    _max_depth = 10
+    _max_modes = 5
+    _max_photons = 7
+    _max_population = 5
+    _max_test = 20
+
     def test(self):
-        # 3-mode QFT and NSx
-        population = torch.tensor(
-            [[30000, 12000, 0,
-              21000, 0, 0,
-              4500, 3526, 4500,
-              1, 0,
-              2, 1,
-              2, 0,
-              0,
-              0, 1],
-             [0, 0, 18000,
-              0, 18000, 18000,
-              2250, 6553, 2250,
-              1, 0,
-              1, 2,
-              1, 0,
-              0,
-              0, 1]], requires_grad=False)
+        random.seed()
+        for i in range(self._max_test):
+            depth = random.randint(1, self._max_depth)
+            n_modes = random.randint(2, self._max_modes)
+            n_parents = random.randint(1, self._max_population)
+            n_photons = random.randint(1, self._max_photons)
 
-        search = TestGeneticAlgorithm('cpu', depth=3, n_state_modes=1, n_ancilla_modes=2, n_state_photons=1,
-                                      n_ancilla_photons=2, max_success_measurements=1)
-        p = search._GeneticAlgorithm__build_permutation_matrix()
-        n, n_inv = search._GeneticAlgorithm__build_normalization_matrix(p)
-        vector = search._GeneticAlgorithm__calculate_state(population, p, n, n_inv)
+            search = TestGeneticAlgorithm('cpu', depth=depth, n_state_modes=0,
+                                          n_ancilla_modes=n_modes, n_state_photons=0,
+                                          n_ancilla_photons=n_photons, max_success_measurements=1)
+            population = search._GeneticAlgorithm__gen_random_population(n_parents)
 
-        self.assertTrue(abs(vector[0][0, 0, 0][0] - sqrt(2.) / 3.) < 0.0001)
-        self.assertTrue(abs(vector[0][1, 1, 1][0] - sqrt(2.) / 3.) < 0.0001)
-        self.assertTrue(abs(vector[0][2, 2, 2][0] - sqrt(2.) / 3.) < 0.0001)
-        self.assertTrue(abs(vector[0][0, 1, 2][0] + 1 / sqrt(3.)) < 0.0001)
+            p = search._GeneticAlgorithm__build_permutation_matrix()
+            n, n_inv = search._GeneticAlgorithm__build_normalization_matrix(p)
+            actuals = search._GeneticAlgorithm__calculate_state(population, p, n, n_inv)
 
-        self.assertTrue(abs(0.625 * sqrt(-48. + 36. * sqrt(2.)) - 0.75 * sqrt(-24. + 18. * sqrt(2)) - vector[1][0, 0, 0][0]) < 0.0001)
-        self.assertTrue(abs(0.5 * sqrt(-4. + 3. * sqrt(2.)) - 1.25 * sqrt(sqrt(2.)) + 1.5 / sqrt(sqrt(2.)) - vector[1][0, 0, 1][0]) < 0.0001)
-        self.assertTrue(abs(5.25 * sqrt(2.) + 0.5 * sqrt(3. - 4. / sqrt(2.)) - sqrt(6. - 4. * sqrt(2.)) - 7.5 - vector[1][0, 0, 2][0]) < 0.0001)
-        self.assertTrue(abs(-0.5 * sqrt(sqrt(2.)) - 0.25 * sqrt(-4. + 3. * sqrt(2.)) + 0.25 * sqrt(-8. + 6. * sqrt(2.)) - vector[1][0, 1, 1][0]) < 0.0001)
-        self.assertTrue(abs(0.5 + sqrt(-sqrt(2.) + 1.5) - sqrt(-2. * sqrt(2.) + 3.) - vector[1][0, 1, 2][0]) < 0.0001)
-        # self.assertTrue(abs( - vector[1][0, 2, 2][0]) < 0.0001)
+            for j in range(n_parents):
+                actual = actuals[j].coalesce()
+                actual_indices = actual.indices()[:-1].t()
+                actual_values = actual.values()
 
+                initial_index = population[j, 5 * depth + 1:5 * depth + 1 + n_photons].numpy().tolist()
+                photon_counts_per_modes = photons_to_modes(initial_index, n_modes)
+                normalization_coeff = 1.
+                for count in photon_counts_per_modes.values():
+                    normalization_coeff *= factorial(count)
+                normalization_coeff = sqrt(normalization_coeff)
+
+                input = use_input_ancillas(initial_index) + "/ " + str(normalization_coeff)
+                expected = run_circuit(input, construct_circuit_matrix(population[j], n_modes, depth), n_modes)
+
+                for k in range(actual_indices.shape[0]):
+                    index = actual_indices[k].numpy().tolist()
+                    actual_value = actual_values[k]
+
+                    photon_counts_per_modes = photons_to_modes(index, n_modes)
+                    normalization_coeff = 1.
+                    for count in photon_counts_per_modes.values():
+                        normalization_coeff *= factorial(count)
+                    normalization_coeff = sqrt(normalization_coeff)
+
+                    expected_value = normalization_coeff * use_ancillas(expected, photon_counts_per_modes)
+                    expected_value = complex(expected_value)
+
+                    self.assertTrue(abs(expected_value - actual_value) < 0.0001,
+                                    msg="Actual is\n{actual}\nExpected\n{expected}\nPopulation is\n{pop}"
+                                    .format(actual=actual_value, expected=expected_value, pop=population))
 
 
 if __name__ == '__main__':

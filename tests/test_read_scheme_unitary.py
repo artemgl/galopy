@@ -25,7 +25,7 @@ class ReadSchemeUnitary(unittest.TestCase):
         random.seed()
         for i in range(self._max_test):
             depth = random.randint(1, self._max_depth)
-            n_modes = random.randint(1, self._max_modes)
+            n_modes = random.randint(2, self._max_modes)
             n_parents = random.randint(1, self._max_population)
 
             search = TestGeneticAlgorithm('cpu', depth=depth, n_state_modes=0,
