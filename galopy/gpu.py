@@ -1,6 +1,9 @@
 import torch
 from math import pi, factorial
 from itertools import product
+import numpy as np
+import random
+from galopy.genetic_algorithm import *
 
 # def build_rz(angle):
 #     return torch.tensor([[1, 0],
@@ -21,7 +24,18 @@ from itertools import product
 #     return res
 
 if __name__ == "__main__":
-    pass
+    # v = torch.sparse_coo_tensor(torch.tensor([[7], [6]]), [8.], size=(10, 10), dtype=torch.complex64)
+    # print(v)
+    # v[0, 0] = 5.
+    # print(v)
+
+    # a = torch.tensor([0, ..., 9])
+    # a = [0, 1, ..., 9]
+    # print(a)
+
+    a = 4
+    print(list(range(1, a - 1)))
+
     # res = torch.eye(N_MODES, device=DEVICE, dtype=torch.complex64)
 
     # pop = gen_random_population(3)

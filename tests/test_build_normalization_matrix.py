@@ -1,6 +1,7 @@
 import unittest
-from galopy.nsx_search import *
+from galopy.genetic_algorithm import *
 from math import sqrt
+import numpy as np
 
 
 class BuildNormalizationMatrix(unittest.TestCase):
@@ -15,7 +16,7 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0., 0., 0.,        0.],
                                      [      0., 0., 0., sqrt(2.)]], requires_grad=False)
 
-        search = NSxSearch('cpu', depth=1, n_ancilla_modes=0, n_ancilla_photons=0, max_success_measurements=1)
+        search = GeneticAlgorithm('cpu', np.array([[0]]), np.array([[1.]]), n_ancilla_modes=1, n_ancilla_photons=1)
         actual, actual_inv = search._GeneticAlgorithm__build_normalization_matrix(
             search._GeneticAlgorithm__build_permutation_matrix())
 
@@ -47,7 +48,7 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0., 0., 0., 0.,       0., 0., 0., 0.,       0.],
                                      [      0., 0., 0., 0.,       0., 0., 0., 0., sqrt(2.)]], requires_grad=False)
 
-        search = NSxSearch('cpu', depth=1, n_ancilla_modes=1, n_ancilla_photons=0, max_success_measurements=1)
+        search = GeneticAlgorithm('cpu', np.array([[0]]), np.array([[1.]]), n_ancilla_modes=2, n_ancilla_photons=1)
         actual, actual_inv = search._GeneticAlgorithm__build_normalization_matrix(
             search._GeneticAlgorithm__build_permutation_matrix())
 
@@ -77,7 +78,7 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0.,       0., 0.,       0., 0., 0., 0.,       0.],
                                      [      0.,       0., 0.,       0., 0., 0., 0., sqrt(6.)]], requires_grad=False)
 
-        search = NSxSearch('cpu', depth=1, n_ancilla_modes=0, n_ancilla_photons=1, max_success_measurements=1)
+        search = GeneticAlgorithm('cpu', np.array([[0]]), np.array([[1.]]), n_ancilla_modes=1, n_ancilla_photons=2)
         actual, actual_inv = search._GeneticAlgorithm__build_normalization_matrix(
             search._GeneticAlgorithm__build_permutation_matrix())
 

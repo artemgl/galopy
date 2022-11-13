@@ -1,17 +1,7 @@
 import unittest
-from galopy.genetic_algorithm import *
 from tests.utils import *
 import random
-
-
-# TODO: Move out of here ?
-class TestGeneticAlgorithm(GeneticAlgorithm):
-
-    def _fill_state(self, population, state_vector):
-        pass
-
-    def _calculate_fidelity_and_probability(self, state_vector):
-        pass
+import numpy as np
 
 
 class ReadSchemeUnitary(unittest.TestCase):
@@ -25,12 +15,12 @@ class ReadSchemeUnitary(unittest.TestCase):
         random.seed()
         for i in range(self._max_test):
             depth = random.randint(1, self._max_depth)
-            n_modes = random.randint(2, self._max_modes)
             n_parents = random.randint(1, self._max_population)
 
-            search = TestGeneticAlgorithm('cpu', depth=depth, n_state_modes=0,
-                                          n_ancilla_modes=n_modes, n_state_photons=0,
-                                          n_ancilla_photons=0, max_success_measurements=1)
+            basic_states = np.random.randint(0, self._max_modes, size=(1, 1))
+            n_modes = basic_states.max() + 1
+
+            search = GeneticAlgorithm('cpu', basic_states, np.array([[1.]]), depth=depth)
             population = search._GeneticAlgorithm__gen_random_population(n_parents)
             actuals = search._GeneticAlgorithm__read_scheme_unitary(population)
 

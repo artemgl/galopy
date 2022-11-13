@@ -3,11 +3,48 @@ import numpy.linalg as la
 from functools import reduce
 from sympy import expand, sympify, latex, Float
 from math import pi
+from galopy.genetic_algorithm import *
+import random
 
 
 # Multiply to get angle in radians from int
 # TODO: move it out of here
 RADIANS = pi / 18000.
+
+
+def is_valid(basic_states):
+    for i in range(basic_states.shape[0]):
+        for j in range(i + 1, basic_states.shape[0]):
+            if np.array_equal(basic_states[i], basic_states[j]):
+                return False
+    return True
+
+
+def gen_random_search(device, max_depth, max_states, max_modes, max_photons, max_success_measurements=1):
+    depth = random.randint(1, max_depth)
+
+    n_photons = random.randint(1, max_photons)
+    n_state_photons = random.randint(1, n_photons)
+    n_ancilla_photons = n_photons - n_state_photons
+
+    n_state_modes = random.randint(1, max_modes)
+    n_states = random.randint(1, min(n_state_modes ** n_state_photons, max_states))
+
+    basic_states = np.random.randint(0, n_state_modes, size=(n_states, n_state_photons))
+    while not is_valid(basic_states):
+        basic_states = np.random.randint(0, n_state_modes, size=(n_states, n_state_photons))
+
+    n_ancilla_modes = random.randint(0, max_modes - n_state_modes)
+    n_modes = n_state_modes + n_ancilla_modes
+
+    if n_ancilla_modes == 0 and n_ancilla_photons > 0:
+        n_photons -= n_ancilla_photons
+        n_ancilla_photons = 0
+
+    matrix = np.identity(n_states)
+
+    return GeneticAlgorithm(device, basic_states, matrix, depth=depth, n_ancilla_modes=n_ancilla_modes,
+                            n_ancilla_photons=n_ancilla_photons, max_success_measurements=max_success_measurements)
 
 
 def build_unitary(phi, theta, lambd, dim, mode0, mode1):
@@ -48,7 +85,7 @@ def construct_circuit_matrix(genome, n_modes, depth):
 #  Transforms input (expression with inputs a_i) to output (expr with b_i)
 #
 def run_circuit(input, matrix, dim):
-    for i in range(dim):
+    for i in range(dim, -1, -1):
         if "a" + str(i) in input:
             b_repr = "("
             for j in range(dim):
@@ -87,10 +124,18 @@ def use_ancillas(input, photon_counts_per_modes):
     for mode in photon_counts_per_modes:
         input = use_result(input, mode, photon_counts_per_modes[mode])
     return input
-def use_input_ancillas(ancilla_in_ones):
+# def use_input_ancillas(ancilla_in_ones):
+#     input = ""
+#     for i in ancilla_in_ones:
+#         input += "a" + str(i) + "*"
+#     if len(input) > 0:
+#         input = input[:-1]
+#     return input
+def use_input(photon_counts_per_modes):
     input = ""
-    for i in ancilla_in_ones:
-        input += "a" + str(i) + "*"
+    for mode in photon_counts_per_modes:
+        for i in range(photon_counts_per_modes[mode]):
+            input += "a" + str(mode) + "*"
     if len(input) > 0:
         input = input[:-1]
     return input

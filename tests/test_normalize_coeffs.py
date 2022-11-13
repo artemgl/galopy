@@ -1,5 +1,6 @@
 import unittest
-from galopy.nsx_search import *
+from galopy.genetic_algorithm import *
+import numpy as np
 
 
 # TODO: add more tests !!! Zero depth is not allowed
@@ -10,12 +11,12 @@ class NormalizeCoeffs(unittest.TestCase):
                                 [-27332,  43438, -19370, -26779, -16354,  37736,   4237,  28544],
                                 [  5540,   8659,  31154, -40704,  40692, -13689,  40202, -14071]], requires_grad=False)
 
-        expected = torch.tensor([[31302, 7327, 8114, 1, 2, 0,  0,  0],
-                                 [ 8668, 7438, 7630, 2, 0, 0,  0,  1],
+        expected = torch.tensor([[31302, 7327, 8114, 2, 0, 0,  0,  0],
+                                 [ 8668, 7438, 7630, 1, 2, 0,  0,  1],
                                  [ 5540, 8659, 4154, 0, 1, 0,  0,  1]], requires_grad=False)
 
-        # TODO: use special test class instead of NSxSearch
-        search = NSxSearch('cpu', depth=1, n_ancilla_modes=2, n_ancilla_photons=2, max_success_measurements=1)
+        search = GeneticAlgorithm('cpu', np.array([[0], [1]]), np.array([[1., 0.], [0., 1.]]),
+                                  n_ancilla_modes=2, n_ancilla_photons=2)
         actual = search._GeneticAlgorithm__normalize_coeffs(initial)
 
         self.assertEqual(expected.shape, actual.shape)
