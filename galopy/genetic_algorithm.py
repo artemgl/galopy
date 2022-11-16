@@ -36,7 +36,7 @@ class GeneticAlgorithm:
 
         self.device = device
 
-        self.matrix = torch.tensor(matrix, device=self.device, requires_grad=False)
+        self.matrix = torch.tensor(matrix, device=self.device, dtype=torch.complex64, requires_grad=False)
 
         input_basic_states, _ = torch.tensor(input_basic_states, device=self.device, requires_grad=False).sort()
         self.input_basic_states = input_basic_states + n_ancilla_modes
@@ -47,10 +47,10 @@ class GeneticAlgorithm:
             raise Exception("Number of input basic states must be equal to the number of columns in transform matrix")
 
         if output_basic_states is None:
-            output_basic_states = input_basic_states
-
-        output_basic_states, _ = torch.tensor(output_basic_states, device=self.device, requires_grad=False).sort()
-        self.output_basic_states = output_basic_states + n_ancilla_modes
+            self.output_basic_states = self.input_basic_states
+        else:
+            output_basic_states, _ = torch.tensor(output_basic_states, device=self.device).sort()
+            self.output_basic_states = output_basic_states + n_ancilla_modes
         # Number of output basic states
         self.n_output_basic_states = self.output_basic_states.shape[0]
 
@@ -309,28 +309,32 @@ class GeneticAlgorithm:
 
         n_state_photons = self.input_basic_states.shape[1]
 
-        indices_0 = torch.tensor([[i] * self.input_basic_states * self.n_output_basic_states *
+        indices_0 = torch.tensor([[i] * self.n_input_basic_states * self.n_output_basic_states *
                                   self.n_success_measurements for i in range(population.shape[0])],
-                                 device=self.device).reshape(-1)
-        indices_1 = torch.tensor(list(range(self.input_basic_states))
+                                 device=self.device, dtype=torch.long).reshape(-1)
+        indices_1 = torch.tensor(list(range(self.n_input_basic_states))
                                  * self.n_output_basic_states * self.n_success_measurements * population.shape[0],
-                                 device=self.device).reshape(-1)
-        indices_2 = torch.tensor([[i] * self.input_basic_states * self.n_output_basic_states
-                                  for i in range(self.n_success_measurements)] * population.shape[0],
-                                 device=self.device).reshape(-1)
-        indices_3 = torch.tensor([[i] * self.input_basic_states for i in range(self.n_output_basic_states)]
+                                 device=self.device, dtype=torch.long).reshape(-1)
+        indices_3 = torch.tensor([[i] * self.n_input_basic_states for i in range(self.n_output_basic_states)]
                                  * population.shape[0] * self.n_success_measurements,
-                                 device=self.device).reshape(-1)
+                                 device=self.device, dtype=torch.long).reshape(-1)
 
         a = (indices_0, indices_1)
-        indices_2 = ancillas[indices_0, indices_2].reshape(-1, self.n_ancilla_photons).long()
-        b = tuple(indices_2[:, i] for i in range(self.n_ancilla_photons))
         indices_3 = self.input_basic_states[indices_3].reshape(-1, n_state_photons).long()
         c = tuple(indices_3[:, i] for i in range(n_state_photons))
-        indices = sum((a, b, c, (0,)), ())
 
-        return state_vector[indices].clone().reshape(population.shape[0], self.n_success_measurements,
-                                                     self.n_output_basic_states, self.n_input_basic_states)
+        if self.n_ancilla_photons > 0:
+            indices_2 = torch.tensor([[i] * self.n_input_basic_states * self.n_output_basic_states
+                                      for i in range(self.n_success_measurements)] * population.shape[0],
+                                     device=self.device, dtype=torch.long).reshape(-1)
+            indices_2 = ancillas[indices_0, indices_2].reshape(-1, self.n_ancilla_photons).long()
+            b = tuple(indices_2[:, i] for i in range(self.n_ancilla_photons))
+            indices = sum((a, b, c, (0,)), ())
+        else:
+            indices = sum((a, c, (0,)), ())
+
+        return state_vector.to_dense()[indices].clone().reshape(population.shape[0], self.n_success_measurements,
+                                                                self.n_output_basic_states, self.n_input_basic_states)
 
     def __calculate_fidelity_and_probability(self, transforms):
         if self.n_success_measurements == 1:
@@ -378,19 +382,20 @@ class GeneticAlgorithm:
         moms = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
         moms = parents[moms, ...]
 
-        mask = torch.rand(size=parents.shape, dtype=torch.float, device=self.device) < 0.5
+        mask = torch.rand(size=dads.shape, dtype=torch.float, device=self.device) < 0.5
+
         return self.__normalize_coeffs(torch.where(mask, dads, moms))
 
     def __mutate(self, mutation_probability, max_mutation, population):
         mask = torch.rand(size=population.shape, dtype=torch.float, device=self.device) < mutation_probability
-        deltas = torch.randint(low=0, high=max_mutation, size=mask.sum(), dtype=torch.float, device=self.device)
+        deltas = torch.randint(0, max_mutation, size=(mask.sum().item(),), device=self.device)
         mutated = population.clone()
         mutated[mask] += deltas
-        return mutated
+        return self.__normalize_coeffs(mutated)
 
     def run(self):
-        n_parents = 100
-        n_offsprings = 20
+        n_parents = 3
+        n_offsprings = 2
         n_generations = 2
 
         permutation_matrix = self.__build_permutation_matrix()
@@ -402,7 +407,7 @@ class GeneticAlgorithm:
                                            normalization_matrix, inverted_normalization_matrix)
 
         # Sort
-        fitness, best_indices = torch.sort(fitness)
+        fitness, best_indices = torch.sort(fitness, descending=True)
         parents = parents[best_indices, ...]
 
         for i in range(n_generations):
@@ -424,4 +429,7 @@ class GeneticAlgorithm:
 
             # If circuit with high fidelity and probability > 1 / 9 is found, then stop
             if fitness[0].item() >= 1000. / 9.:
+                print(parents[0])
                 break
+
+            print("Generation: ", i)
