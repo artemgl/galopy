@@ -120,7 +120,7 @@ class GeneticAlgorithm:
         res = torch.randint(0, 36000,
                             (n_parents,
                              5 * self.depth +  # 3 angles and 2 modes for each one
-                             1 +  # Number of measurements
+                             1 +  # Number of measurements TODO: убрать
                              self.n_ancilla_photons * (1 +  # for initial state of ancilla photons
                                                         self.n_success_measurements)),  # results of measurements
                             device=self.device, dtype=torch.int, requires_grad=False)
@@ -364,7 +364,11 @@ class GeneticAlgorithm:
         else:
             raise Exception("Not implemented yet! Number of success measurements should be 1 so far")
 
-    def __calculate_fitness(self, fidelities, probabilities):
+    def __calculate_fitness(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
+        state = self.__calculate_state(population,
+                                       permutation_matrix, normalization_matrix, inv_normalization_matrix)
+        transforms = self.__construct_transforms(population, state)
+        fidelities, probabilities = self.__calculate_fidelity_and_probability(transforms)
         return torch.where(fidelities > 0.95, 1000. * probabilities, fidelities)
 
     def __crossover(self, n_offsprings, parents):
@@ -384,9 +388,40 @@ class GeneticAlgorithm:
         mutated[mask] += deltas
         return mutated
 
-    def __select(self, population):
-        pass
-
     def run(self):
+        n_parents = 100
+        n_offsprings = 20
+        n_generations = 2
+
         permutation_matrix = self.__build_permutation_matrix()
         normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
+
+        parents = self.__gen_random_population(n_parents)
+        # Calculate fitness
+        fitness = self.__calculate_fitness(parents, permutation_matrix,
+                                           normalization_matrix, inverted_normalization_matrix)
+
+        # Sort
+        fitness, best_indices = torch.sort(fitness)
+        parents = parents[best_indices, ...]
+
+        for i in range(n_generations):
+            # Create generation
+            children = self.__crossover(n_offsprings, parents)
+            mutated = self.__mutate(0.5, 50, torch.cat((parents, children), 0))
+            next_generation = torch.cat((children, mutated), 0)
+
+            # Calculate fitness
+            next_generation_fitness = self.__calculate_fitness(next_generation, permutation_matrix,
+                                                               normalization_matrix, inverted_normalization_matrix)
+
+            fitness = torch.cat((fitness, next_generation_fitness), 0)
+            population = torch.cat((parents, next_generation), 0)
+
+            # Take best
+            fitness, best_indices = torch.topk(fitness, n_parents)
+            parents = population[best_indices, ...]
+
+            # If circuit with high fidelity and probability > 1 / 9 is found, then stop
+            if fitness[0].item() >= 1000. / 9.:
+                break
