@@ -8,17 +8,19 @@ RADIANS = pi / 18000.
 
 
 class GeneticAlgorithm:
-    # TODO: проверка matrix и basic_states на совместимость по shape
-    def __init__(self, device: str, basic_states, matrix, depth=1,
-                 n_ancilla_modes=0, n_ancilla_photons=0, max_success_measurements=1):
+    # TODO: n_success_measurements может быть равен 0, если нет дополнительных фотонов
+    def __init__(self, device: str, matrix, input_basic_states, output_basic_states=None, depth=1,
+                 n_ancilla_modes=0, n_ancilla_photons=0, n_success_measurements=1):
         """
         Algorithm searching a circuit
             Parameters:
                 device: The device on which you want to store data and perform calculations (e.g. 'cuda')
 
-                basic_states: Basic states on which transform is performed
-
                 matrix: Matrix representing desired transform in the basis of basic states
+
+                input_basic_states: Basic states on which transform is performed
+
+                output_basic_states: Basic states which are counted as output
 
                 depth: Number of local two-mode unitary transforms. One transform contains two phase shifters and one
                 beam splitter. Must be > 0
@@ -27,22 +29,37 @@ class GeneticAlgorithm:
 
                 n_ancilla_photons: Number of ancilla photons
 
-                max_success_measurements: Max count of measurements that we consider as successful gate operation
+                n_success_measurements: Count of measurements that we consider as successful gate operation. Must be > 0
         """
         if n_ancilla_modes == 0 and n_ancilla_photons > 0:
             raise Exception("If number of ancilla modes is zero, number of ancilla photons must be zero as well")
 
         self.device = device
 
-        basic_states, _ = torch.tensor(basic_states, device=self.device, requires_grad=False).sort()
-        self.basic_states = basic_states + n_ancilla_modes
-        # Number of basic states
-        self.n_basic_states = basic_states.shape[0]
         self.matrix = torch.tensor(matrix, device=self.device, requires_grad=False)
+
+        input_basic_states, _ = torch.tensor(input_basic_states, device=self.device, requires_grad=False).sort()
+        self.input_basic_states = input_basic_states + n_ancilla_modes
+        # Number of input basic states
+        self.n_input_basic_states = self.input_basic_states.shape[0]
+
+        if not matrix.shape[1] == self.n_input_basic_states:
+            raise Exception("Number of input basic states must be equal to the number of columns in transform matrix")
+
+        if output_basic_states is None:
+            output_basic_states = input_basic_states
+
+        output_basic_states, _ = torch.tensor(output_basic_states, device=self.device, requires_grad=False).sort()
+        self.output_basic_states = output_basic_states + n_ancilla_modes
+        # Number of output basic states
+        self.n_output_basic_states = self.output_basic_states.shape[0]
+
+        if not matrix.shape[0] == self.n_output_basic_states:
+            raise Exception("Number of output basic states must be equal to the number of rows in transform matrix")
 
         self.depth = depth
 
-        self.n_state_modes = basic_states.max().item() + 1
+        self.n_state_modes = input_basic_states.max().item() + 1
 
         self.n_ancilla_modes = n_ancilla_modes
         # Total number of modes in scheme
@@ -51,13 +68,14 @@ class GeneticAlgorithm:
         # It's considered that all of ancilla modes always participate in this transform
         self.n_work_modes = self.n_modes
 
-        self.n_state_photons = basic_states.shape[1]
+        self.n_state_photons = input_basic_states.shape[1]
         self.n_ancilla_photons = n_ancilla_photons
         # Total number of photons
-        self.n_photons = basic_states.shape[1] + n_ancilla_photons
+        self.n_photons = input_basic_states.shape[1] + n_ancilla_photons
 
-        self.max_success_measurements = max_success_measurements
+        self.n_success_measurements = n_success_measurements
 
+    # TODO: при нескольких измерениях не допускать повторяющиеся
     def __normalize_coeffs(self, population):
         """
         Bring the data to a convenient form.
@@ -87,7 +105,7 @@ class GeneticAlgorithm:
         y[mask] += 1
         y[mask] %= self.n_work_modes
 
-        population[:, 5 * self.depth] %= self.max_success_measurements
+        population[:, 5 * self.depth] %= self.n_success_measurements
         if self.n_ancilla_modes > 0:
             population[:, 5 * self.depth + 1:] %= self.n_ancilla_modes
 
@@ -104,7 +122,7 @@ class GeneticAlgorithm:
                              5 * self.depth +  # 3 angles and 2 modes for each one
                              1 +  # Number of measurements
                              self.n_ancilla_photons * (1 +  # for initial state of ancilla photons
-                                                        self.max_success_measurements)),  # results of measurements
+                                                        self.n_success_measurements)),  # results of measurements
                             device=self.device, dtype=torch.int, requires_grad=False)
 
         return self.__normalize_coeffs(res)
@@ -213,12 +231,12 @@ class GeneticAlgorithm:
     def __construct_state(self, population):
         """Create the initial state in Dirac form."""
         # TODO: move size to outer scope
-        size = [population.shape[0], self.n_basic_states] + [self.n_modes] * self.n_photons + [1]
+        size = [population.shape[0], self.n_input_basic_states] + [self.n_modes] * self.n_photons + [1]
 
         # TODO: outer scope ?
-        sub_indices_0 = torch.tensor([[i] * self.n_basic_states for i in range(population.shape[0])],
+        sub_indices_0 = torch.tensor([[i] * self.n_input_basic_states for i in range(population.shape[0])],
                                      device=self.device, requires_grad=False).reshape(-1, 1)
-        sub_indices_1 = torch.tensor([list(range(self.n_basic_states)) for _ in range(population.shape[0])],
+        sub_indices_1 = torch.tensor([list(range(self.n_input_basic_states)) for _ in range(population.shape[0])],
                                      device=self.device, requires_grad=False).reshape(-1, 1)
 
         ancilla_photons = population[:, 5 * self.depth + 1:5 * self.depth + 1 + self.n_ancilla_photons]
@@ -227,13 +245,13 @@ class GeneticAlgorithm:
         if self.n_ancilla_photons > 0:
             indices = torch.cat((sub_indices_0, sub_indices_1,
                                  ancilla_photons[sub_indices_0.reshape(-1)].reshape(-1, self.n_ancilla_photons),
-                                 self.basic_states[sub_indices_1.reshape(-1)],
-                                 torch.zeros((population.shape[0] * self.n_basic_states, 1),
+                                 self.input_basic_states[sub_indices_1.reshape(-1)],
+                                 torch.zeros((population.shape[0] * self.n_input_basic_states, 1),
                                              device=self.device, requires_grad=False)), 1).t()
         else:
             indices = torch.cat((sub_indices_0, sub_indices_1,
-                                 self.basic_states[sub_indices_1.reshape(-1)],
-                                 torch.zeros((population.shape[0] * self.n_basic_states, 1),
+                                 self.input_basic_states[sub_indices_1.reshape(-1)],
+                                 torch.zeros((population.shape[0] * self.n_input_basic_states, 1),
                                              device=self.device, requires_grad=False)), 1).t()
 
         values = torch.ones(indices.shape[1], device=self.device, dtype=torch.complex64, requires_grad=False)
@@ -251,10 +269,10 @@ class GeneticAlgorithm:
 
         state_vector = self.__construct_state(population).to_dense()
         # TODO: remove!!!
-        size = [population.shape[0], self.n_basic_states] + [self.n_modes] * self.n_photons + [1]
+        size = [population.shape[0], self.n_input_basic_states] + [self.n_modes] * self.n_photons + [1]
 
         # Normalize (transform to operator form)
-        state_vector = state_vector.reshape(population.shape[0] * self.n_basic_states, -1)
+        state_vector = state_vector.reshape(population.shape[0] * self.n_input_basic_states, -1)
         state_vector.t_()
         state_vector = torch.sparse.mm(normalization_matrix, state_vector)
         state_vector.t_()
@@ -273,7 +291,7 @@ class GeneticAlgorithm:
             state_vector = unitaries.matmul(state_vector)
             state_vector.transpose_(-3 - i, -2)
 
-        state_vector = state_vector.reshape(population.shape[0] * self.n_basic_states, -1)
+        state_vector = state_vector.reshape(population.shape[0] * self.n_input_basic_states, -1)
         state_vector.t_()
         # TODO: Vector to sparse coo before multiplying
         # Sum up indistinguishable states with precomputed permutation matrix
@@ -285,20 +303,90 @@ class GeneticAlgorithm:
 
         return state_vector.to_sparse_coo()
 
-    def __calculate_fidelity_and_probability(self, state_vector):
-        pass
+    def __construct_transforms(self, population, state_vector):
+        ancillas = population[:, 5 * self.depth + self.n_ancilla_photons + 1:].reshape(population.shape[0],
+                                                                                       self.n_success_measurements, -1)
 
-    def __calculate_loss(self, state_vector):
-        pass
+        n_state_photons = self.input_basic_states.shape[1]
 
-    def __crossover(self, population):
-        pass
+        indices_0 = torch.tensor([[i] * self.input_basic_states * self.n_output_basic_states *
+                                  self.n_success_measurements for i in range(population.shape[0])],
+                                 device=self.device).reshape(-1)
+        indices_1 = torch.tensor(list(range(self.input_basic_states))
+                                 * self.n_output_basic_states * self.n_success_measurements * population.shape[0],
+                                 device=self.device).reshape(-1)
+        indices_2 = torch.tensor([[i] * self.input_basic_states * self.n_output_basic_states
+                                  for i in range(self.n_success_measurements)] * population.shape[0],
+                                 device=self.device).reshape(-1)
+        indices_3 = torch.tensor([[i] * self.input_basic_states for i in range(self.n_output_basic_states)]
+                                 * population.shape[0] * self.n_success_measurements,
+                                 device=self.device).reshape(-1)
 
-    def __mutate(self, population):
-        pass
+        a = (indices_0, indices_1)
+        indices_2 = ancillas[indices_0, indices_2].reshape(-1, self.n_ancilla_photons).long()
+        b = tuple(indices_2[:, i] for i in range(self.n_ancilla_photons))
+        indices_3 = self.input_basic_states[indices_3].reshape(-1, n_state_photons).long()
+        c = tuple(indices_3[:, i] for i in range(n_state_photons))
+        indices = sum((a, b, c, (0,)), ())
+
+        return state_vector[indices].clone().reshape(population.shape[0], self.n_success_measurements,
+                                                     self.n_output_basic_states, self.n_input_basic_states)
+
+    def __calculate_fidelity_and_probability(self, transforms):
+        if self.n_success_measurements == 1:
+            # Probabilities
+            dot = self.matrix.reshape(1, 1, self.n_output_basic_states, self.n_input_basic_states).mul(transforms)
+            dot = torch.sum(dot, 2)
+            prob_per_state = torch.abs(torch.mul(dot, dot.conj()))  # TODO: Optimize ?
+            probabilities = prob_per_state.sum(-1) / self.n_input_basic_states
+            probabilities = probabilities.reshape(-1)
+
+            # Fidelities
+            # Formula is taken from the article:
+            # https://www.researchgate.net/publication/222547674_Fidelity_of_quantum_operations
+            m = self.matrix.t().conj()\
+                .reshape(1, 1, self.n_input_basic_states, self.n_output_basic_states).matmul(transforms)
+
+            a = torch.abs(m.matmul(m.transpose(-1, -2).conj()))  # TODO: Optimize ?
+            a = a.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)  # batched trace
+            a = a.reshape(-1)
+
+            b = m.diagonal(offset=0, dim1=-1, dim2=-2).sum(-1)  # batched trace
+            b = torch.abs(b.mul(b.conj()))  # TODO: Optimize ?
+            b = b.reshape(-1)
+
+            fidelities = (a + b) / self.n_input_basic_states / (self.n_input_basic_states + 1)
+
+            # The probability of gate is counted so to get real fidelity we should divide it to probability
+            pure_fidelities = fidelities / probabilities
+
+            return pure_fidelities, probabilities
+        else:
+            raise Exception("Not implemented yet! Number of success measurements should be 1 so far")
+
+    def __calculate_fitness(self, fidelities, probabilities):
+        return torch.where(fidelities > 0.95, 1000. * probabilities, fidelities)
+
+    def __crossover(self, n_offsprings, parents):
+        dads = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
+        dads = parents[dads, ...]
+
+        moms = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
+        moms = parents[moms, ...]
+
+        mask = torch.rand(size=parents.shape, dtype=torch.float, device=self.device) < 0.5
+        return self.__normalize_coeffs(torch.where(mask, dads, moms))
+
+    def __mutate(self, mutation_probability, max_mutation, population):
+        mask = torch.rand(size=population.shape, dtype=torch.float, device=self.device) < mutation_probability
+        deltas = torch.randint(low=0, high=max_mutation, size=mask.sum(), dtype=torch.float, device=self.device)
+        mutated = population.clone()
+        mutated[mask] += deltas
+        return mutated
 
     def __select(self, population):
         pass
 
     def run(self):
-        pass
+        permutation_matrix = self.__build_permutation_matrix()
+        normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)

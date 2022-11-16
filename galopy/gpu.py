@@ -24,7 +24,128 @@ from galopy.genetic_algorithm import *
 #     return res
 
 if __name__ == "__main__":
-    # v = torch.sparse_coo_tensor(torch.tensor([[7], [6]]), [8.], size=(10, 10), dtype=torch.complex64)
+    # def is_valid(basic_states):
+    #     for i in range(basic_states.shape[0]):
+    #         for j in range(i + 1, basic_states.shape[0]):
+    #             if np.array_equal(basic_states[i], basic_states[j]):
+    #                 return False
+    #     return True
+    #
+    # def gen_random_search(device, max_depth, max_states, max_modes, max_photons, max_success_measurements=1):
+    #     depth = 2
+    #
+    #     n_photons = 4
+    #     n_state_photons = 2
+    #     n_ancilla_photons = 2
+    #
+    #     n_state_modes = 2
+    #     n_states = 2
+    #
+    #     basic_states = np.random.randint(0, n_state_modes, size=(n_states, n_state_photons))
+    #     while not is_valid(basic_states):
+    #         basic_states = np.random.randint(0, n_state_modes, size=(n_states, n_state_photons))
+    #
+    #     n_ancilla_modes = 3
+    #     n_modes = n_state_modes + n_ancilla_modes
+    #
+    #     if n_ancilla_modes == 0 and n_ancilla_photons > 0:
+    #         n_photons -= n_ancilla_photons
+    #         n_ancilla_photons = 0
+    #
+    #     matrix = np.identity(n_states)
+    #
+    #     return GeneticAlgorithm(device, basic_states, matrix, depth=depth, n_ancilla_modes=n_ancilla_modes,
+    #                             n_ancilla_photons=n_ancilla_photons, max_success_measurements=max_success_measurements)
+    #
+    # s = gen_random_search('cpu', 2, 2, 3, 5, 5)
+    #
+    # print(s.basic_states)
+    #
+    # n_parents = 2
+    # population = s._GeneticAlgorithm__gen_random_population(n_parents)
+    #
+    # print(population)
+    #
+    # p = s._GeneticAlgorithm__build_permutation_matrix()
+    # n, n_inv = s._GeneticAlgorithm__build_normalization_matrix(p)
+    # actuals = s._GeneticAlgorithm__calculate_state(population, p, n, n_inv)
+    #
+    # print(actuals)
+
+    from math import sqrt
+
+    transforms = torch.tensor([[[[1. / sqrt(5), 0., 0., 0.],
+                                 [0., 1. / sqrt(7), 0., 0.],
+                                 [0., 0., 1. / sqrt(7), 0.],
+                                 [0., 0., 0., 1.j / sqrt(7)]]],
+                               [[[1., 0., 0., 0.],
+                                 [0., 1., 0., 0.],
+                                 [0., 0., 0., 1.],
+                                 [0., 0., 1., 0.]]]], dtype=torch.complex64)
+    # print(transforms.shape)
+    # transforms = torch.zeros(size=(2, 1, 4, 4), dtype=torch.complex64)
+    # for i1 in range(transforms.shape[0]):
+    #     for i2 in range(transforms.shape[1]):
+    #         for i3 in range(transforms.shape[2]):
+    #             for i4 in range(transforms.shape[3]):
+    #                 transforms[i1, i2, i3, i4] = random.randint(0, 10) / 10. + 1j * random.randint(0, 10) / 10.
+    # print(transforms)
+    matrix = torch.tensor([[1., 0., 0., 0.],
+                           [0., 1., 0., 0.],
+                           [0., 0., 1., 0.],
+                           [0., 0., 0., 1.j]])
+
+    mask = torch.rand(size=(5, 5), dtype=torch.float, device='cuda') < 0.3
+    print(mask)
+    print(mask.sum())
+
+    # device = 'cuda'
+    #
+    # basic_states = torch.tensor([[3, 4],
+    #                              [4, 4]], dtype=torch.int32, device=device)
+    #
+    # population = torch.tensor([[21623, 24584, 31691, 32531,  2569,  4842,     3,     4,     2,     3, 3,     0,     1,
+    #                             0,     0,     0,     1,     1,     2,     1,  1,     0,     1],
+    #                            [28385, 13347, 18852, 30962,  1667,   768,     2,     3,     2,     0, 4,     0,     1,
+    #                             1,     2,     2,     2,     1,     1,     1,  1,     0,     0]], dtype=torch.int32, device=device)
+    #
+    # # print(population[0, 1])
+    # # print(population[1, 2])
+    # # g = [[0, 1],
+    # #      [1, 2]]
+    # # print(population[g])
+    #
+    # state_vector = torch.sparse_coo_tensor(indices=torch.tensor([
+    #                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+    #                    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1],
+    #                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1],
+    #                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 2, 2, 1, 2],
+    #                    [2, 2, 2, 3, 3, 4, 2, 2, 2, 3, 3, 4, 1, 2, 3, 2, 3, 4, 4],
+    #                    [2, 3, 4, 3, 4, 4, 2, 3, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+    #                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], device=device),
+    #                 #   1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19
+    #    values=torch.tensor(
+    #                  [1.,  2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12., 13., 14., 15., 16., 17., 18., 19.], device=device),
+    #    size=(2, 2, 5, 5, 5, 5, 1), device=device, requires_grad=False)
+    # state_vector = state_vector.to_dense()
+    #
+    # depth = 2
+    # n_ancilla_photons = 2
+    # max_success_measurements = 5
+    # ancillas = population[:, 5 * depth + n_ancilla_photons + 1:].reshape(population.shape[0], max_success_measurements, -1)
+    #
+    # n_input_basic_states = 2
+    # n_output_basic_states = 2
+    # n_parents = population.shape[0]
+
+
+    # v = torch.sparse_coo_tensor(torch.tensor([[0, 0, 1, 1],
+    #                                           [0, 1, 0, 1],
+    #                                           [1, 1, 2, 2],
+    #                                           [2, 2, 3, 3],
+    #                                           [3, 4, 4, 5]
+    #                                           [0]]),
+    #                             [8.], size=(10, 10), dtype=torch.complex64)
     # print(v)
     # v[0, 0] = 5.
     # print(v)
@@ -32,9 +153,6 @@ if __name__ == "__main__":
     # a = torch.tensor([0, ..., 9])
     # a = [0, 1, ..., 9]
     # print(a)
-
-    a = 4
-    print(list(range(1, a - 1)))
 
     # res = torch.eye(N_MODES, device=DEVICE, dtype=torch.complex64)
 
