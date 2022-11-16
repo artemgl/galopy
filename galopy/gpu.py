@@ -4,9 +4,10 @@ from itertools import product
 import numpy as np
 import random
 from galopy.genetic_algorithm import *
+from galopy.nsx_search import *
 
 
-if __name__ == "__main__":
+def cz():
     matrix = np.array([[1., 0., 0., 0.],
                        [0., 1., 0., 0.],
                        [0., 0., 1., 0.],
@@ -22,10 +23,43 @@ if __name__ == "__main__":
     search = GeneticAlgorithm('cuda', matrix, input_basic_states=basic_states, depth=3,
                               n_ancilla_modes=2, n_ancilla_photons=0)
     search.run()
-    #
-    # a = torch.tensor([0, 1, 2], device='cuda')
-    # indices = sum(((a,), (0,)), ())
-    #
-    # x = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], device='cuda')
-    # print(x)
-    # print(x[indices])
+
+
+if __name__ == "__main__":
+    # search = NSxSearch('cuda', depth=3, n_ancilla_modes=2, n_ancilla_photons=1, n_success_measurements=1)
+    # search.run()
+
+    cz()
+
+    # matrix = np.array([[1., 0., 0., 0.],
+    #                    [0., 1., 0., 0.],
+    #                    [0., 0., 1., 0.],
+    #                    [0., 0., 0., -1.],
+    #                    [0., 0., 0., 0.],
+    #                    [0., 0., 0., 0.],
+    #                    [0., 0., 0., 0.],
+    #                    [0., 0., 0., 0.],
+    #                    [0., 0., 0., 0.],
+    #                    [0., 0., 0., 0.]])
+    # # (3)----------
+    # # (2)----------
+    # # (1)----------
+    # # (0)----------
+    # input_basic_states = np.array([[0, 2],
+    #                                [0, 3],
+    #                                [1, 2],
+    #                                [1, 3]])
+    # output_basic_states = np.array([[0, 2],
+    #                                 [0, 3],
+    #                                 [1, 2],
+    #                                 [1, 3],
+    #                                 [0, 0],
+    #                                 [1, 1],
+    #                                 [2, 2],
+    #                                 [3, 3],
+    #                                 [0, 1],
+    #                                 [2, 3]])
+    # search = GeneticAlgorithm('cuda', matrix, input_basic_states=input_basic_states,
+    #                           output_basic_states=output_basic_states, depth=8,
+    #                           n_ancilla_modes=4, n_ancilla_photons=2)
+    # search.run()
