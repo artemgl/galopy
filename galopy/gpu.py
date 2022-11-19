@@ -22,7 +22,7 @@ def cz():
                              [1, 3]])
     search = GeneticAlgorithm('cuda', matrix, input_basic_states=basic_states, depth=3,
                               n_ancilla_modes=2, n_ancilla_photons=0)
-    search.run(200, 800, 200, 0, 1. / 9.)
+    search.run(1. / 9., 200, 800, 200, 0)
 
 
 def cx():
@@ -40,7 +40,7 @@ def cx():
                              [1, 3]])
     search = GeneticAlgorithm('cuda', matrix, input_basic_states=basic_states, depth=5,
                               n_ancilla_modes=2, n_ancilla_photons=0)
-    search.run(200, 800, 200, 0, 1. / 9.)
+    search.run(1. / 9., 200, 800, 200, 0)
 
 
 def qft3():
@@ -62,7 +62,7 @@ def qft3():
                              [0]])
     search = GeneticAlgorithm('cuda', matrix, input_basic_states=basic_states, depth=3,
                               n_ancilla_modes=0, n_ancilla_photons=0)
-    search.run(n_generations, n_parents, n_offsprings, n_elite, min_probability)
+    search.run(min_probability, n_generations, n_parents, n_offsprings, n_elite)
 
 
 def qft4():
@@ -87,11 +87,11 @@ def qft4():
                              [0]])
     search = GeneticAlgorithm('cuda', matrix, input_basic_states=basic_states, depth=4,
                               n_ancilla_modes=0, n_ancilla_photons=0)
-    search.run(n_generations, n_parents, n_offsprings, n_elite, min_probability)
+    search.run(min_probability, n_generations, n_parents, n_offsprings, n_elite)
 
 
 if __name__ == "__main__":
-    min_probability = 0.25
+    min_probability = 0.3
 
     n_parents = 1600
     n_offsprings = 400
@@ -112,10 +112,10 @@ if __name__ == "__main__":
     #                          [1, 3]])
     # search = GeneticAlgorithm('cuda', matrix, input_basic_states=basic_states, depth=5,
     #                           n_ancilla_modes=3, n_ancilla_photons=1)
-    # search.run(n_generations, n_parents, n_offsprings, n_elite, min_probability)
+    # search.run(min_probability, n_generations, n_parents, n_offsprings, n_elite)
 
-    search = NSxSearch('cuda', depth=3, n_ancilla_modes=2, n_ancilla_photons=1, n_success_measurements=1)
-    search.run(n_generations, n_parents, n_offsprings, n_elite, min_probability)
+    search = NSxSearch('cuda', depth=10, n_ancilla_modes=4, n_ancilla_photons=1, n_success_measurements=1)
+    search.run(min_probability, n_generations, n_parents, n_offsprings, n_elite)
 
     # cz()
     # qft3()
@@ -151,4 +151,4 @@ if __name__ == "__main__":
     # search = GeneticAlgorithm('cuda', matrix, input_basic_states=input_basic_states,
     #                           output_basic_states=output_basic_states, depth=8,
     #                           n_ancilla_modes=4, n_ancilla_photons=2)
-    # search.run(n_generations, n_parents, n_offsprings, n_elite, min_fitness)
+    # search.run(min_probability, n_generations, n_parents, n_offsprings, n_elite)

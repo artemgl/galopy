@@ -1,7 +1,8 @@
 import torch
 from math import pi, factorial
 from itertools import product
-from galopy.data_processing import print_circuit
+from galopy.data_processing import print_circuit, write_circuits, read_circuits
+from datetime import datetime
 
 # Multiply to get angle in radians from int
 # TODO: move it out of here
@@ -403,23 +404,29 @@ class GeneticAlgorithm:
         fidelities, probabilities = self.__calculate_fidelity_and_probability(transforms)
         return torch.where(fidelities > 0.999, 1000. * probabilities, fidelities)
 
-    def run(self, n_generations, n_parents, n_offsprings, n_elite, min_probability):
+    def run(self, min_probability, n_generations, n_parents, n_offsprings, n_elite,
+            source_file=None, save_result=False):
         permutation_matrix = self.__build_permutation_matrix()
         normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
 
-        parents = self.__gen_random_population(n_parents)
-
-        # est = torch.tensor([[ 1984,  8721, 13104, 30700, 25479,  6976, 16993, 21696, 28767, 10879,
-        #  3489,  3373,  6675,  5098,  3226,     2,     0,     4,     1,     4,
-        #     0,     2,     0,     3,     5,     0]], device=self.device)
-        # parents = torch.cat((parents, est), 0)
+        if source_file is None:
+            parents = self.__gen_random_population(n_parents)
+        else:
+            circuits = read_circuits(source_file)
+            n_circuits = circuits.shape[0]
+            circuits = torch.tensor(circuits, device=self.device)
+            if n_circuits < n_parents:
+                parents = self.__gen_random_population(n_parents - n_circuits)
+                parents = torch.cat((circuits, parents), 0)
+            else:
+                parents = circuits
 
         # Calculate fitness
         fitness = self.__calculate_fitness(parents, permutation_matrix,
                                            normalization_matrix, inverted_normalization_matrix)
 
-        # Sort
-        fitness, best_indices = torch.sort(fitness, descending=True)
+        # Take best
+        fitness, best_indices = torch.topk(fitness, n_parents)
         parents = parents[best_indices, ...]
 
         for i in range(n_generations):
@@ -446,9 +453,14 @@ class GeneticAlgorithm:
             if fitness[0].item() >= 1000. * min_probability:
                 break
 
+        # Save result to file
+        if save_result:
+            write_circuits("galopy " + str(datetime.now().strftime("%d-%m-%Y %H-%M-%S")) + ".csv",
+                           parents.cpu().numpy())
+
+        # Print result info
         print("Circuit:")
         print_circuit(parents[0], self.depth, self.n_ancilla_photons)
-        # print(parents[0])
         # TODO: refactor this
         state = self.__calculate_state(parents[0].reshape(1, -1),
                                        permutation_matrix, normalization_matrix, inverted_normalization_matrix)

@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def print_circuit(circuit, depth, n_ancilla_photons):
@@ -29,6 +30,16 @@ def print_circuit(circuit, depth, n_ancilla_photons):
         print(elements, ancillas, sep='\n')
     else:
         print(elements)
+
+
+def write_circuits(path, circuits):
+    circuits = pd.DataFrame(circuits)
+    circuits.to_csv(path)
+
+
+def read_circuits(path):
+    circuits = pd.read_csv(path, index_col=0)
+    return np.array(circuits.values)
 
 
 if __name__ == "__main__":
