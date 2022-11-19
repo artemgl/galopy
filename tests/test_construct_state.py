@@ -18,7 +18,7 @@ class ConstructState(unittest.TestCase):
             depth = search.depth
             n_ancilla_photons = search.n_ancilla_photons
             n_modes = search.n_modes
-            basic_states = search.basic_states
+            basic_states = search.input_basic_states
             n_states = basic_states.shape[0]
 
             n_parents = random.randint(1, self._max_population)

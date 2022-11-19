@@ -43,8 +43,10 @@ def gen_random_search(device, max_depth, max_states, max_modes, max_photons, max
 
     matrix = np.identity(n_states)
 
-    return GeneticAlgorithm(device, basic_states, matrix, depth=depth, n_ancilla_modes=n_ancilla_modes,
-                            n_ancilla_photons=n_ancilla_photons, max_success_measurements=max_success_measurements)
+    n_success_measurements = 1
+
+    return GeneticAlgorithm(device, matrix, basic_states, depth=depth, n_ancilla_modes=n_ancilla_modes,
+                            n_ancilla_photons=n_ancilla_photons, n_success_measurements=n_success_measurements)
 
 
 def build_unitary(phi, theta, lambd, dim, mode0, mode1):

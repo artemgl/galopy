@@ -1,6 +1,7 @@
 import torch
 from math import pi, factorial
 from itertools import product
+from galopy.data_processing import print_circuit
 
 # Multiply to get angle in radians from int
 # TODO: move it out of here
@@ -318,7 +319,7 @@ class GeneticAlgorithm:
                                  device=self.device, dtype=torch.long).reshape(-1)
 
         a = (indices_0, indices_1)
-        indices_3 = self.input_basic_states[indices_3].long().reshape(-1, n_state_photons)
+        indices_3 = self.output_basic_states[indices_3].long().reshape(-1, n_state_photons)
         c = tuple(indices_3[:, i] for i in range(n_state_photons))
 
         if self.n_ancilla_photons > 0:
@@ -347,6 +348,7 @@ class GeneticAlgorithm:
             # probabilities = prob_per_state.sum(-1) / self.n_input_basic_states
             # probabilities = probabilities.reshape(-1)
 
+            # TODO: изменить формулу
             dot = torch.abs(transforms.mul(transforms.conj()))  # TODO: Optimize ?
             prob_per_state = torch.sum(dot, 2)
             probabilities = prob_per_state.sum(-1) / self.n_input_basic_states
@@ -389,7 +391,7 @@ class GeneticAlgorithm:
 
     def __mutate(self, mutation_probability, max_mutation, population):
         mask = torch.rand(size=population.shape, dtype=torch.float, device=self.device) < mutation_probability
-        deltas = torch.randint(0, max_mutation, size=(mask.sum().item(),), device=self.device)
+        deltas = torch.randint(-max_mutation, max_mutation, size=(mask.sum().item(),), device=self.device)
         mutated = population.clone()
         mutated[mask] += deltas
         return self.__normalize_coeffs(mutated)
@@ -401,18 +403,17 @@ class GeneticAlgorithm:
         fidelities, probabilities = self.__calculate_fidelity_and_probability(transforms)
         return torch.where(fidelities > 0.999, 1000. * probabilities, fidelities)
 
-    def run(self):
-        # n_parents = 2
-        # n_offsprings = 3
-        # n_generations = 2
-        n_parents = 800
-        n_offsprings = 200
-        n_generations = 2000
-
+    def run(self, n_generations, n_parents, n_offsprings, n_elite, min_probability):
         permutation_matrix = self.__build_permutation_matrix()
         normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
 
         parents = self.__gen_random_population(n_parents)
+
+        # est = torch.tensor([[ 1984,  8721, 13104, 30700, 25479,  6976, 16993, 21696, 28767, 10879,
+        #  3489,  3373,  6675,  5098,  3226,     2,     0,     4,     1,     4,
+        #     0,     2,     0,     3,     5,     0]], device=self.device)
+        # parents = torch.cat((parents, est), 0)
+
         # Calculate fitness
         fitness = self.__calculate_fitness(parents, permutation_matrix,
                                            normalization_matrix, inverted_normalization_matrix)
@@ -422,8 +423,6 @@ class GeneticAlgorithm:
         parents = parents[best_indices, ...]
 
         for i in range(n_generations):
-            print("Generation: ", i + 1)
-
             # Create generation
             children = self.__crossover(n_offsprings, parents)
             mutated = self.__mutate(0.5, 50, torch.cat((parents, children), 0))
@@ -440,14 +439,16 @@ class GeneticAlgorithm:
             fitness, best_indices = torch.topk(fitness, n_parents)
             parents = population[best_indices, ...]
 
-            # If circuit with high fidelity and probability >= ... is found, then stop
-            if fitness[0].item() >= 1000. / 9.:
-                break
-
+            print("Generation: ", i + 1)
             print("Best fitness: ", fitness[0].item())
 
+            # If circuit with high enough fitness is found, stop
+            if fitness[0].item() >= 1000. * min_probability:
+                break
+
         print("Circuit:")
-        print(parents[0])
+        print_circuit(parents[0], self.depth, self.n_ancilla_photons)
+        # print(parents[0])
         # TODO: refactor this
         state = self.__calculate_state(parents[0].reshape(1, -1),
                                        permutation_matrix, normalization_matrix, inverted_normalization_matrix)

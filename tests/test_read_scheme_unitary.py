@@ -20,7 +20,7 @@ class ReadSchemeUnitary(unittest.TestCase):
             basic_states = np.random.randint(0, self._max_modes, size=(1, 1))
             n_modes = basic_states.max() + 1
 
-            search = GeneticAlgorithm('cpu', basic_states, np.array([[1.]]), depth=depth)
+            search = GeneticAlgorithm('cpu', np.array([[1.]]), basic_states, depth=depth)
             population = search._GeneticAlgorithm__gen_random_population(n_parents)
             actuals = search._GeneticAlgorithm__read_scheme_unitary(population)
 

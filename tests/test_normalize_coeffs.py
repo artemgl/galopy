@@ -15,7 +15,7 @@ class NormalizeCoeffs(unittest.TestCase):
                                  [ 8668, 7438, 7630, 1, 2, 0,  0,  1],
                                  [ 5540, 8659, 4154, 0, 1, 0,  0,  1]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[0], [1]]), np.array([[1., 0.], [0., 1.]]),
+        search = GeneticAlgorithm('cpu', np.array([[1., 0.], [0., 1.]]), np.array([[0], [1]]),
                                   n_ancilla_modes=2, n_ancilla_photons=2)
         actual = search._GeneticAlgorithm__normalize_coeffs(initial)
 

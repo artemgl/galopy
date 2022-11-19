@@ -10,7 +10,7 @@ class BuildPermutationMatrix(unittest.TestCase):
                                  [0., 0., 0., 0.],
                                  [0., 0., 0., 1.]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[0]]), np.array([[1.]]), n_ancilla_modes=1, n_ancilla_photons=1)
+        search = GeneticAlgorithm('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=1)
         actual = search._GeneticAlgorithm__build_permutation_matrix()
 
         self.assertEqual(expected.shape, actual.shape)
@@ -27,7 +27,7 @@ class BuildPermutationMatrix(unittest.TestCase):
                                  [0., 0., 0., 0., 0., 0., 0., 0., 0.],
                                  [0., 0., 0., 0., 0., 0., 0., 0., 1.]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[0]]), np.array([[1.]]), n_ancilla_modes=2, n_ancilla_photons=1)
+        search = GeneticAlgorithm('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=2, n_ancilla_photons=1)
         actual = search._GeneticAlgorithm__build_permutation_matrix()
 
         self.assertEqual(expected.shape, actual.shape)
@@ -43,7 +43,7 @@ class BuildPermutationMatrix(unittest.TestCase):
                                  [0., 0., 0., 0., 0., 0., 0., 0.],
                                  [0., 0., 0., 0., 0., 0., 0., 1.]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[0]]), np.array([[1.]]), n_ancilla_modes=1, n_ancilla_photons=2)
+        search = GeneticAlgorithm('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=2)
         actual = search._GeneticAlgorithm__build_permutation_matrix()
 
         self.assertEqual(expected.shape, actual.shape)
