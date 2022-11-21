@@ -2,7 +2,7 @@ import torch
 from math import pi, factorial
 from itertools import product
 from galopy.data_processing import print_circuit, write_circuits, read_circuits
-from datetime import datetime
+from time import time
 
 # Multiply to get angle in radians from int
 # TODO: move it out of here
@@ -112,7 +112,8 @@ class GeneticAlgorithm:
             population[:, 5 * self.depth + 1:] %= self.n_ancilla_modes
 
         if self.n_ancilla_photons > 0:
-            modes, _ = population[:, 5 * self.depth + 1:].reshape(population.shape[0], -1, self.n_ancilla_photons).sort()
+            modes, _ = population[:, 5 * self.depth + 1:].reshape(population.shape[0], -1,
+                                                                  self.n_ancilla_photons).sort()
             population[:, 5 * self.depth + 1:] = modes.reshape(population.shape[0], -1)
 
         return population
@@ -124,13 +125,14 @@ class GeneticAlgorithm:
                              5 * self.depth +  # 3 angles and 2 modes for each one
                              1 +  # Number of measurements TODO: убрать
                              self.n_ancilla_photons * (1 +  # for initial state of ancilla photons
-                                                        self.n_success_measurements)),  # results of measurements
+                                                       self.n_success_measurements)),  # results of measurements
                             device=self.device, dtype=torch.int, requires_grad=False)
 
         return self.__normalize_coeffs(res)
 
     def __build_permutation_matrix(self):
         """Create matrix for output state computing."""
+
         def to_idx(*modes):
             """Convert multi-dimensional index to one-dimensional."""
             res = 0
@@ -193,10 +195,10 @@ class GeneticAlgorithm:
         # Indices to slice correctly
         # TODO: Move to outer scope
         indices_0 = torch.tensor([[i] * 4 * self.depth for i in range(population.shape[0])], device=self.device,
-                                 requires_grad=False)\
+                                 requires_grad=False) \
             .reshape(-1, self.depth, 4)
         indices_1 = torch.tensor([[i, i, i, i] for i in range(self.depth)] * population.shape[0], device=self.device,
-                                 requires_grad=False)\
+                                 requires_grad=False) \
             .reshape(-1, self.depth, 4)
         indices_2 = population[:, mask_modes_2]
         indices_3 = population[:, mask_modes_3]
@@ -358,7 +360,7 @@ class GeneticAlgorithm:
             # Fidelities
             # Formula is taken from the article:
             # https://www.researchgate.net/publication/222547674_Fidelity_of_quantum_operations
-            m = self.matrix.t().conj()\
+            m = self.matrix.t().conj() \
                 .reshape(1, 1, self.n_input_basic_states, self.n_output_basic_states).matmul(transforms)
 
             a = torch.abs(m.matmul(m.transpose(-1, -2).conj()))  # TODO: Optimize ?
@@ -379,6 +381,14 @@ class GeneticAlgorithm:
         else:
             raise Exception("Not implemented yet! Number of success measurements should be 1 so far")
 
+    # TODO: хранить эти матрицы в поле класса, а не передавать как параметр везде
+    def __get_fidelity_and_probability(self, population, permutation_matrix, normalization_matrix,
+                                       inv_normalization_matrix):
+        state = self.__calculate_state(population,
+                                       permutation_matrix, normalization_matrix, inv_normalization_matrix)
+        transforms = self.__construct_transforms(population, state)
+        return self.__calculate_fidelity_and_probability(transforms)
+
     def __crossover(self, n_offsprings, parents):
         dads = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
         dads = parents[dads, ...]
@@ -390,81 +400,168 @@ class GeneticAlgorithm:
 
         return self.__normalize_coeffs(torch.where(mask, dads, moms))
 
-    def __mutate(self, mutation_probability, max_mutation, population):
-        mask = torch.rand(size=population.shape, dtype=torch.float, device=self.device) < mutation_probability
+    def __mutate(self, mutation_probability, max_mutation, n_mutated, population):
+        perm = torch.randperm(population.shape[0], device=self.device)[:n_mutated]
+        sub_population = population[perm]
+
+        mask = torch.rand(size=sub_population.shape, dtype=torch.float, device=self.device) < mutation_probability
         deltas = torch.randint(-max_mutation, max_mutation, size=(mask.sum().item(),), device=self.device)
-        mutated = population.clone()
+        mutated = sub_population.clone()
         mutated[mask] += deltas
         return self.__normalize_coeffs(mutated)
 
     def __calculate_fitness(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
-        state = self.__calculate_state(population,
-                                       permutation_matrix, normalization_matrix, inv_normalization_matrix)
-        transforms = self.__construct_transforms(population, state)
-        fidelities, probabilities = self.__calculate_fidelity_and_probability(transforms)
+        fidelities, probabilities = self.__get_fidelity_and_probability(population,
+                                                                        permutation_matrix,
+                                                                        normalization_matrix, inv_normalization_matrix)
         return torch.where(fidelities > 0.999, 1000. * probabilities, fidelities)
 
-    def run(self, min_probability, n_generations, n_parents, n_offsprings, n_elite,
-            source_file=None, save_result=False):
+    def __select(self, population, fitness, n_to_select):
+        fitness, indices = torch.topk(fitness, n_to_select)
+        return population[indices, ...], fitness
+
+    def run(self, min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite,
+            source_file=None, result_file=None):
+
+        if n_elite > n_population:
+            raise Exception("Number of elite can't be bigger than {threshold}.".format(threshold=n_population))
+
+        # Save start time
+        start_time = time()
+
+        # Precompute matrices
         permutation_matrix = self.__build_permutation_matrix()
         normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
 
+        # Get initial population
         if source_file is None:
-            parents = self.__gen_random_population(n_parents)
+            population = self.__gen_random_population(n_population)
         else:
             circuits = read_circuits(source_file)
             n_circuits = circuits.shape[0]
             circuits = torch.tensor(circuits, device=self.device)
-            if n_circuits < n_parents:
-                parents = self.__gen_random_population(n_parents - n_circuits)
-                parents = torch.cat((circuits, parents), 0)
+            if n_circuits < n_population:
+                population = self.__gen_random_population(n_population - n_circuits)
+                population = torch.cat((circuits, population), 0)
             else:
-                parents = circuits
+                population = circuits
 
-        # Calculate fitness
-        fitness = self.__calculate_fitness(parents, permutation_matrix,
+        # Calculate fitness for the initial population
+        fitness = self.__calculate_fitness(population, permutation_matrix,
                                            normalization_matrix, inverted_normalization_matrix)
 
-        # Take best
-        fitness, best_indices = torch.topk(fitness, n_parents)
-        parents = parents[best_indices, ...]
-
         for i in range(n_generations):
-            # Create generation
-            children = self.__crossover(n_offsprings, parents)
-            mutated = self.__mutate(0.5, 50, torch.cat((parents, children), 0))
-            next_generation = torch.cat((children, mutated), 0)
+            # Create new generation
+            children = self.__crossover(n_offsprings, population)
+            mutated = self.__mutate(0.5, 50, n_mutated, population)
+            new_individuals = torch.cat((children, mutated), 0)
 
-            # Calculate fitness
-            next_generation_fitness = self.__calculate_fitness(next_generation, permutation_matrix,
-                                                               normalization_matrix, inverted_normalization_matrix)
+            # Calculate fitness for the new individuals
+            new_fitness = self.__calculate_fitness(new_individuals, permutation_matrix,
+                                                   normalization_matrix, inverted_normalization_matrix)
 
-            fitness = torch.cat((fitness, next_generation_fitness), 0)
-            population = torch.cat((parents, next_generation), 0)
+            # Select individuals
+            new_individuals, new_fitness = self.__select(new_individuals, new_fitness, n_population - n_elite)
 
-            # Take best
-            fitness, best_indices = torch.topk(fitness, n_parents)
-            parents = population[best_indices, ...]
+            # Get best from current population
+            elite_fitness, elite_indices = torch.topk(fitness, n_elite)
+            elite = population[elite_indices, ...]
 
-            print("Generation: ", i + 1)
-            print("Best fitness: ", fitness[0].item())
+            # New generation
+            fitness = torch.cat((elite_fitness, new_fitness), 0)
+            population = torch.cat((elite, new_individuals), 0)
+
+            print("Generation:", i + 1)
+            best_fitness = fitness.max().item()
+            print("Best fitness:", best_fitness)
 
             # If circuit with high enough fitness is found, stop
-            if fitness[0].item() >= 1000. * min_probability:
+            if best_fitness >= 1000. * min_probability:
+                n_generations = i + 1
                 break
 
-        # Save result to file
-        if save_result:
-            write_circuits("galopy " + str(datetime.now().strftime("%d-%m-%Y %H-%M-%S")) + ".csv",
-                           parents.cpu().numpy())
+        # Sort result population
+        fitness, indices = torch.sort(fitness, descending=True)
+        population = population[indices, ...]
+
+        # Save result population to file
+        if result_file is not None:
+            write_circuits(result_file, population.cpu().numpy())
 
         # Print result info
         print("Circuit:")
-        print_circuit(parents[0], self.depth, self.n_ancilla_photons)
-        # TODO: refactor this
-        state = self.__calculate_state(parents[0].reshape(1, -1),
-                                       permutation_matrix, normalization_matrix, inverted_normalization_matrix)
-        transforms = self.__construct_transforms(parents[0].reshape(1, -1), state)
-        f, p = self.__calculate_fidelity_and_probability(transforms)
+        print_circuit(population[0], self.depth, self.n_ancilla_photons)
+        f, p = self.__get_fidelity_and_probability(population[0].reshape(1, -1),
+                                                   permutation_matrix,
+                                                   normalization_matrix, inverted_normalization_matrix)
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())
+        print(f"Processed {n_generations} generations in {time() - start_time:.2f} seconds")
+
+    # def run(self, min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite,
+    #         source_file=None, result_file=None):
+    #     n_parents = n_population
+    #
+    #     permutation_matrix = self.__build_permutation_matrix()
+    #     normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
+    #
+    #     # Get initial population
+    #     if source_file is None:
+    #         parents = self.__gen_random_population(n_parents)
+    #     else:
+    #         circuits = read_circuits(source_file)
+    #         n_circuits = circuits.shape[0]
+    #         circuits = torch.tensor(circuits, device=self.device)
+    #         if n_circuits < n_parents:
+    #             parents = self.__gen_random_population(n_parents - n_circuits)
+    #             parents = torch.cat((circuits, parents), 0)
+    #         else:
+    #             parents = circuits
+    #
+    #     # Calculate fitness
+    #     fitness = self.__calculate_fitness(parents, permutation_matrix,
+    #                                        normalization_matrix, inverted_normalization_matrix)
+    #
+    #     # Take best
+    #     fitness, best_indices = torch.topk(fitness, n_parents)
+    #     parents = parents[best_indices, ...]
+    #
+    #     for i in range(n_generations):
+    #         # Create generation
+    #         children = self.__crossover(n_offsprings, parents)
+    #         mutated = self.__mutate(0.5, 50, n_offsprings + n_population, torch.cat((parents, children), 0))
+    #         next_generation = torch.cat((children, mutated), 0)
+    #
+    #         # Calculate fitness
+    #         next_generation_fitness = self.__calculate_fitness(next_generation, permutation_matrix,
+    #                                                            normalization_matrix, inverted_normalization_matrix)
+    #
+    #         fitness = torch.cat((fitness, next_generation_fitness), 0)
+    #         population = torch.cat((parents, next_generation), 0)
+    #
+    #         # Take best
+    #         fitness, best_indices = torch.topk(fitness, n_parents)
+    #         parents = population[best_indices, ...]
+    #
+    #         print("Generation: ", i + 1)
+    #         print("Best fitness: ", fitness[0].item())
+    #
+    #         # If circuit with high enough fitness is found, stop
+    #         if fitness[0].item() >= 1000. * min_probability:
+    #             break
+    #
+    #     # # Save result to file
+    #     # if result_file is None:
+    #     #     result_file = "galopy " + str(datetime.now().strftime("%d-%m-%Y %H-%M-%S")) + ".csv"
+    #     # write_circuits(result_file, parents.cpu().numpy())
+    #
+    #     # Print result info
+    #     print("Circuit:")
+    #     print_circuit(parents[0], self.depth, self.n_ancilla_photons)
+    #     # TODO: refactor this
+    #     state = self.__calculate_state(parents[0].reshape(1, -1),
+    #                                    permutation_matrix, normalization_matrix, inverted_normalization_matrix)
+    #     transforms = self.__construct_transforms(parents[0].reshape(1, -1), state)
+    #     f, p = self.__calculate_fidelity_and_probability(transforms)
+    #     print("Fidelity: ", f[0].item())
+    #     print("Probability: ", p[0].item())
