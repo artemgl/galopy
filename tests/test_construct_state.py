@@ -26,7 +26,7 @@ class ConstructState(unittest.TestCase):
             actuals = search._GeneticAlgorithm__construct_state(population)
 
             for j in range(n_parents):
-                common_index = population[j, 5 * depth + 1:5 * depth + 1 + n_ancilla_photons].numpy().tolist()
+                common_index = population[j, 5 * depth:5 * depth + n_ancilla_photons].numpy().tolist()
 
                 for k in range(n_states):
                     actual = actuals[j, k].coalesce()

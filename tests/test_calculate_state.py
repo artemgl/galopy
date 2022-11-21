@@ -10,7 +10,7 @@ class CalculateState(unittest.TestCase):
     _max_states = 4
     _max_photons = 7
     _max_population = 5
-    _max_test = 20
+    _max_test = 5
 
     def test(self):
         random.seed()
@@ -31,7 +31,7 @@ class CalculateState(unittest.TestCase):
             actuals = search._GeneticAlgorithm__calculate_state(population, p, n, n_inv)
 
             for j in range(n_parents):
-                common_index = population[j, 5 * depth + 1:5 * depth + 1 + n_ancilla_photons].numpy().tolist()
+                common_index = population[j, 5 * depth:5 * depth + n_ancilla_photons].numpy().tolist()
                 for n in range(n_states):
                     actual = actuals[j, n].coalesce()
                     actual_indices = actual.indices()[:-1].t()

@@ -77,6 +77,13 @@ class GeneticAlgorithm:
 
         self.n_success_measurements = n_success_measurements
 
+        # Init indices for flexible slicing
+        self._start_idx_rz_angles = 0
+        self._start_idx_ry_angles = 2 * self.depth
+        self._start_idx_modes = 3 * self.depth
+        self._start_idx_ancilla_state_in = 5 * self.depth
+        self._start_idx_ancilla_state_out = 5 * self.depth + self.n_ancilla_photons
+
     # TODO: при нескольких измерениях не допускать повторяющиеся
     def __normalize_coeffs(self, population):
         """
@@ -90,31 +97,30 @@ class GeneticAlgorithm:
 
         Next 2 * self.depth are pairs of modes on which local unitary is performed.
 
-        Next one is the number of measurements.
-
         Next self.n_ancilla_photons are initial state for ancilla photons.
 
         The last are results of measurements.
         """
-        population[:, 0:2 * self.depth] %= 36000
-        population[:, 2 * self.depth:3 * self.depth] %= 9000  # Not continious in case of mutations
+        population[:, self._start_idx_rz_angles:self._start_idx_rz_angles + 2 * self.depth] %= 36000
+        # Not continious in case of mutations. Consider changing 9000 to 36000
+        population[:, self._start_idx_ry_angles:self._start_idx_ry_angles + self.depth] %= 9000
 
-        population[:, 3 * self.depth:5 * self.depth] %= self.n_work_modes
+        population[:, self._start_idx_modes:self._start_idx_modes + 2 * self.depth] %= self.n_work_modes
         # If modes are equal, increment the second one
-        x = population[:, 3 * self.depth:5 * self.depth:2]
-        y = population[:, 3 * self.depth + 1:5 * self.depth:2]
+        x = population[:, self._start_idx_modes:self._start_idx_modes + 2 * self.depth:2]
+        y = population[:, self._start_idx_modes + 1:self._start_idx_modes + 2 * self.depth:2]
         mask = y == x
         y[mask] += 1
         y[mask] %= self.n_work_modes
 
-        population[:, 5 * self.depth] %= self.n_success_measurements
-        if self.n_ancilla_modes > 0:
-            population[:, 5 * self.depth + 1:] %= self.n_ancilla_modes
+        if self.n_success_measurements > 0:
+            if self.n_ancilla_modes > 0:
+                population[:, self._start_idx_ancilla_state_in:] %= self.n_ancilla_modes
 
-        if self.n_ancilla_photons > 0:
-            modes, _ = population[:, 5 * self.depth + 1:].reshape(population.shape[0], -1,
-                                                                  self.n_ancilla_photons).sort()
-            population[:, 5 * self.depth + 1:] = modes.reshape(population.shape[0], -1)
+            if self.n_ancilla_photons > 0:
+                modes, _ = population[:, self._start_idx_ancilla_state_in:].reshape(population.shape[0], -1,
+                                                                                    self.n_ancilla_photons).sort()
+                population[:, self._start_idx_ancilla_state_in:] = modes.reshape(population.shape[0], -1)
 
         return population
 
@@ -123,13 +129,13 @@ class GeneticAlgorithm:
         res = torch.randint(0, 36000,
                             (n_parents,
                              5 * self.depth +  # 3 angles and 2 modes for each one
-                             1 +  # Number of measurements TODO: убрать
                              self.n_ancilla_photons * (1 +  # for initial state of ancilla photons
                                                        self.n_success_measurements)),  # results of measurements
                             device=self.device, dtype=torch.int, requires_grad=False)
 
         return self.__normalize_coeffs(res)
 
+    # TODO: возможно через reshape без to_idx ?
     def __build_permutation_matrix(self):
         """Create matrix for output state computing."""
 
@@ -180,37 +186,32 @@ class GeneticAlgorithm:
         """Read genome and return the unitary transformation of the scheme it represents."""
         # Masks to get indices of modes
         # TODO: Move to outer scope
-        mask_modes_2 = torch.tensor([[3 * self.depth + 2 * i,
-                                      3 * self.depth + 2 * i,
-                                      3 * self.depth + 2 * i + 1,
-                                      3 * self.depth + 2 * i + 1]
-                                     for i in range(self.depth)], dtype=torch.long, device=self.device,
-                                    requires_grad=False)
-        mask_modes_3 = torch.tensor([[3 * self.depth + 2 * i,
-                                      3 * self.depth + 2 * i + 1,
-                                      3 * self.depth + 2 * i,
-                                      3 * self.depth + 2 * i + 1]
-                                     for i in range(self.depth)], dtype=torch.long, device=self.device,
-                                    requires_grad=False)
+        mask_modes_2 = torch.tensor([[self._start_idx_modes + 2 * i,
+                                      self._start_idx_modes + 2 * i,
+                                      self._start_idx_modes + 2 * i + 1,
+                                      self._start_idx_modes + 2 * i + 1]
+                                     for i in range(self.depth)], dtype=torch.long, device=self.device)
+        mask_modes_3 = torch.tensor([[self._start_idx_modes + 2 * i,
+                                      self._start_idx_modes + 2 * i + 1,
+                                      self._start_idx_modes + 2 * i,
+                                      self._start_idx_modes + 2 * i + 1]
+                                     for i in range(self.depth)], dtype=torch.long, device=self.device)
         # Indices to slice correctly
         # TODO: Move to outer scope
-        indices_0 = torch.tensor([[i] * 4 * self.depth for i in range(population.shape[0])], device=self.device,
-                                 requires_grad=False) \
+        indices_0 = torch.tensor([[i] * 4 * self.depth for i in range(population.shape[0])], device=self.device)\
             .reshape(-1, self.depth, 4)
-        indices_1 = torch.tensor([[i, i, i, i] for i in range(self.depth)] * population.shape[0], device=self.device,
-                                 requires_grad=False) \
+        indices_1 = torch.tensor([[i, i, i, i] for i in range(self.depth)] * population.shape[0], device=self.device)\
             .reshape(-1, self.depth, 4)
         indices_2 = population[:, mask_modes_2]
         indices_3 = population[:, mask_modes_3]
 
         # Get angles
-        phies = population[:, 0:self.depth]
-        thetas = population[:, 2 * self.depth:3 * self.depth]
-        lambdas = population[:, self.depth:2 * self.depth]
+        phies = population[:, self._start_idx_rz_angles:self._start_idx_rz_angles + self.depth]
+        thetas = population[:, self._start_idx_ry_angles:self._start_idx_ry_angles + self.depth]
+        lambdas = population[:, self._start_idx_rz_angles + self.depth:self._start_idx_rz_angles + 2 * self.depth]
 
         # Write unitary coefficients for each triple of angles
-        unitaries_coeffs = torch.zeros(population.shape[0], self.depth, 4, device=self.device, dtype=torch.complex64,
-                                       requires_grad=False)
+        unitaries_coeffs = torch.zeros(population.shape[0], self.depth, 4, device=self.device, dtype=torch.complex64)
         unitaries_coeffs[:, :, 0] = torch.cos(thetas * RADIANS)
         unitaries_coeffs[:, :, 2] = torch.sin(thetas * RADIANS)
         unitaries_coeffs[:, :, 1] = -unitaries_coeffs[:, :, 2] * torch.exp(1.j * phies * RADIANS)
@@ -219,9 +220,9 @@ class GeneticAlgorithm:
 
         # Create an unitary for each triple of angles
         unitaries = torch.zeros(population.shape[0], self.depth, self.n_modes, self.n_modes,
-                                device=self.device, dtype=torch.complex64, requires_grad=False)
+                                device=self.device, dtype=torch.complex64)
         # TODO: Move mask to outer scope
-        mask = torch.eye(self.n_modes, device=self.device, dtype=torch.bool, requires_grad=False)
+        mask = torch.eye(self.n_modes, device=self.device, dtype=torch.bool)
         unitaries[:, :, mask] = 1.
         unitaries[indices_0.long(), indices_1.long(), indices_2.long(), indices_3.long()] = unitaries_coeffs
 
@@ -239,28 +240,27 @@ class GeneticAlgorithm:
 
         # TODO: outer scope ?
         sub_indices_0 = torch.tensor([[i] * self.n_input_basic_states for i in range(population.shape[0])],
-                                     device=self.device, requires_grad=False).reshape(-1, 1)
+                                     device=self.device).reshape(-1, 1)
         sub_indices_1 = torch.tensor([list(range(self.n_input_basic_states)) for _ in range(population.shape[0])],
-                                     device=self.device, requires_grad=False).reshape(-1, 1)
+                                     device=self.device).reshape(-1, 1)
 
-        ancilla_photons = population[:, 5 * self.depth + 1:5 * self.depth + 1 + self.n_ancilla_photons]
+        ancilla_photons =\
+            population[:, self._start_idx_ancilla_state_in:self._start_idx_ancilla_state_in + self.n_ancilla_photons]
 
         # TODO: outer scope
         if self.n_ancilla_photons > 0:
             indices = torch.cat((sub_indices_0, sub_indices_1,
                                  ancilla_photons[sub_indices_0.reshape(-1)].reshape(-1, self.n_ancilla_photons),
                                  self.input_basic_states[sub_indices_1.reshape(-1)],
-                                 torch.zeros((population.shape[0] * self.n_input_basic_states, 1),
-                                             device=self.device, requires_grad=False)), 1).t()
+                                 torch.zeros_like(sub_indices_0, device=self.device)), 1).t()
         else:
             indices = torch.cat((sub_indices_0, sub_indices_1,
                                  self.input_basic_states[sub_indices_1.reshape(-1)],
-                                 torch.zeros((population.shape[0] * self.n_input_basic_states, 1),
-                                             device=self.device, requires_grad=False)), 1).t()
+                                 torch.zeros_like(sub_indices_0, device=self.device)), 1).t()
 
-        values = torch.ones(indices.shape[1], device=self.device, dtype=torch.complex64, requires_grad=False)
+        values = torch.ones(indices.shape[1], device=self.device, dtype=torch.complex64)
 
-        return torch.sparse_coo_tensor(indices, values, size=size, device=self.device, requires_grad=False)
+        return torch.sparse_coo_tensor(indices, values, size=size, device=self.device)
 
     # TODO: move args to private fields
     def __calculate_state(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
@@ -268,8 +268,7 @@ class GeneticAlgorithm:
         # TODO: move size and size_mtx to outer scope ?
         # TODO: create state_vector once at the beginning ?
         # Create state vector in Dirac form
-        # size = [population.shape[0]] + [self.n_modes] * self.n_photons + [1]
-        size_mtx = [population.shape[0], 1] + [1] * (self.n_photons - 1) + [self.n_modes] * 2
+        size_mtx = [population.shape[0]] + [1] * self.n_photons + [self.n_modes] * 2
 
         state_vector = self.__construct_state(population).to_dense()
         # TODO: remove!!!
@@ -326,7 +325,7 @@ class GeneticAlgorithm:
         c = tuple(indices_3[:, i] for i in range(n_state_photons))
 
         if self.n_ancilla_photons > 0:
-            ancillas = population[:, 5 * self.depth + self.n_ancilla_photons + 1:].long() \
+            ancillas = population[:, self._start_idx_ancilla_state_out:].long() \
                 .reshape(population.shape[0], self.n_success_measurements, -1)
 
             indices_2 = torch.tensor([[i] * self.n_input_basic_states * self.n_output_basic_states
@@ -497,71 +496,3 @@ class GeneticAlgorithm:
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())
         print(f"Processed {n_generations} generations in {time() - start_time:.2f} seconds")
-
-    # def run(self, min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite,
-    #         source_file=None, result_file=None):
-    #     n_parents = n_population
-    #
-    #     permutation_matrix = self.__build_permutation_matrix()
-    #     normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
-    #
-    #     # Get initial population
-    #     if source_file is None:
-    #         parents = self.__gen_random_population(n_parents)
-    #     else:
-    #         circuits = read_circuits(source_file)
-    #         n_circuits = circuits.shape[0]
-    #         circuits = torch.tensor(circuits, device=self.device)
-    #         if n_circuits < n_parents:
-    #             parents = self.__gen_random_population(n_parents - n_circuits)
-    #             parents = torch.cat((circuits, parents), 0)
-    #         else:
-    #             parents = circuits
-    #
-    #     # Calculate fitness
-    #     fitness = self.__calculate_fitness(parents, permutation_matrix,
-    #                                        normalization_matrix, inverted_normalization_matrix)
-    #
-    #     # Take best
-    #     fitness, best_indices = torch.topk(fitness, n_parents)
-    #     parents = parents[best_indices, ...]
-    #
-    #     for i in range(n_generations):
-    #         # Create generation
-    #         children = self.__crossover(n_offsprings, parents)
-    #         mutated = self.__mutate(0.5, 50, n_offsprings + n_population, torch.cat((parents, children), 0))
-    #         next_generation = torch.cat((children, mutated), 0)
-    #
-    #         # Calculate fitness
-    #         next_generation_fitness = self.__calculate_fitness(next_generation, permutation_matrix,
-    #                                                            normalization_matrix, inverted_normalization_matrix)
-    #
-    #         fitness = torch.cat((fitness, next_generation_fitness), 0)
-    #         population = torch.cat((parents, next_generation), 0)
-    #
-    #         # Take best
-    #         fitness, best_indices = torch.topk(fitness, n_parents)
-    #         parents = population[best_indices, ...]
-    #
-    #         print("Generation: ", i + 1)
-    #         print("Best fitness: ", fitness[0].item())
-    #
-    #         # If circuit with high enough fitness is found, stop
-    #         if fitness[0].item() >= 1000. * min_probability:
-    #             break
-    #
-    #     # # Save result to file
-    #     # if result_file is None:
-    #     #     result_file = "galopy " + str(datetime.now().strftime("%d-%m-%Y %H-%M-%S")) + ".csv"
-    #     # write_circuits(result_file, parents.cpu().numpy())
-    #
-    #     # Print result info
-    #     print("Circuit:")
-    #     print_circuit(parents[0], self.depth, self.n_ancilla_photons)
-    #     # TODO: refactor this
-    #     state = self.__calculate_state(parents[0].reshape(1, -1),
-    #                                    permutation_matrix, normalization_matrix, inverted_normalization_matrix)
-    #     transforms = self.__construct_transforms(parents[0].reshape(1, -1), state)
-    #     f, p = self.__calculate_fidelity_and_probability(transforms)
-    #     print("Fidelity: ", f[0].item())
-    #     print("Probability: ", p[0].item())
