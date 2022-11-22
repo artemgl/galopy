@@ -1,5 +1,5 @@
 import unittest
-from galopy.genetic_algorithm import *
+from galopy.circuit_search import *
 from math import sqrt
 import numpy as np
 
@@ -16,9 +16,9 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0., 0., 0.,        0.],
                                      [      0., 0., 0., sqrt(2.)]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=1)
-        actual, actual_inv = search._GeneticAlgorithm__build_normalization_matrix(
-            search._GeneticAlgorithm__build_permutation_matrix())
+        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=1)
+        actual, actual_inv = search._CircuitSearch__build_normalization_matrix(
+            search._CircuitSearch__build_permutation_matrix())
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
@@ -48,9 +48,9 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0., 0., 0., 0.,       0., 0., 0., 0.,       0.],
                                      [      0., 0., 0., 0.,       0., 0., 0., 0., sqrt(2.)]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=2, n_ancilla_photons=1)
-        actual, actual_inv = search._GeneticAlgorithm__build_normalization_matrix(
-            search._GeneticAlgorithm__build_permutation_matrix())
+        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=2, n_ancilla_photons=1)
+        actual, actual_inv = search._CircuitSearch__build_normalization_matrix(
+            search._CircuitSearch__build_permutation_matrix())
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
@@ -78,9 +78,9 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0.,       0., 0.,       0., 0., 0., 0.,       0.],
                                      [      0.,       0., 0.,       0., 0., 0., 0., sqrt(6.)]], requires_grad=False)
 
-        search = GeneticAlgorithm('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=2)
-        actual, actual_inv = search._GeneticAlgorithm__build_normalization_matrix(
-            search._GeneticAlgorithm__build_permutation_matrix())
+        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=2)
+        actual, actual_inv = search._CircuitSearch__build_normalization_matrix(
+            search._CircuitSearch__build_permutation_matrix())
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())

@@ -1,8 +1,8 @@
-from galopy.genetic_algorithm import *
+from galopy.circuit_search import *
 import numpy as np
 
 
-class NSxSearch(GeneticAlgorithm):
+class NSxSearch(CircuitSearch):
     def __init__(self, device: str, depth=1, n_ancilla_modes=0, n_ancilla_photons=0, n_success_measurements=1):
         basic_states = np.array([[0, 0],
                                  [0, 1],

@@ -20,8 +20,8 @@ def print_circuit(circuit, depth, n_ancilla_photons):
                              'Modes': modes})
 
     if n_ancilla_photons > 0:
-        modes_in = circuit[5 * depth + 1:5 * depth + 1 + n_ancilla_photons].cpu().numpy()
-        modes_out = circuit[5 * depth + 1 + n_ancilla_photons:5 * depth + 1 + 2 * n_ancilla_photons].cpu().numpy()
+        modes_in = circuit[5 * depth:5 * depth + n_ancilla_photons].cpu().numpy()
+        modes_out = circuit[5 * depth + n_ancilla_photons:5 * depth + 2 * n_ancilla_photons].cpu().numpy()
 
         ancillas = pd.DataFrame({'Mode in': modes_in,
                                  'Mode out': modes_out})
@@ -40,7 +40,3 @@ def write_circuits(path, circuits):
 def read_circuits(path):
     circuits = pd.read_csv(path, index_col=0)
     return np.array(circuits.values)
-
-
-if __name__ == "__main__":
-    pass

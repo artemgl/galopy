@@ -1,5 +1,5 @@
 import unittest
-from galopy.genetic_algorithm import *
+from galopy.circuit_search import *
 import numpy as np
 
 
@@ -15,9 +15,9 @@ class NormalizeCoeffs(unittest.TestCase):
                                  [ 8668, 7438, 7630, 1, 2,  1,  0],
                                  [ 5540, 8659, 4154, 0, 1,  1,  1]])
 
-        search = GeneticAlgorithm('cpu', np.array([[1., 0.], [0., 1.]]), np.array([[0], [1]]),
+        search = CircuitSearch('cpu', np.array([[1., 0.], [0., 1.]]), np.array([[0], [1]]),
                                   n_ancilla_modes=2, n_ancilla_photons=1)
-        actual = search._GeneticAlgorithm__normalize_coeffs(initial)
+        actual = search._CircuitSearch__normalize_coeffs(initial)
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.numpy().tolist())

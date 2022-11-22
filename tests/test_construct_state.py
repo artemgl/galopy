@@ -6,8 +6,8 @@ class ConstructState(unittest.TestCase):
 
     _max_depth = 10
     _max_states = 5
-    _max_modes = 15
-    _max_photons = 10
+    _max_modes = 10
+    _max_photons = 6
     _max_population = 20
     _max_test = 100
 
@@ -22,8 +22,8 @@ class ConstructState(unittest.TestCase):
             n_states = basic_states.shape[0]
 
             n_parents = random.randint(1, self._max_population)
-            population = search._GeneticAlgorithm__gen_random_population(n_parents)
-            actuals = search._GeneticAlgorithm__construct_state(population)
+            population = search._CircuitSearch__gen_random_population(n_parents)
+            actuals = search._CircuitSearch__construct_state(population)
 
             for j in range(n_parents):
                 common_index = population[j, 5 * depth:5 * depth + n_ancilla_photons].numpy().tolist()

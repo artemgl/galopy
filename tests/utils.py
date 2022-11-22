@@ -3,7 +3,7 @@ import numpy.linalg as la
 from functools import reduce
 from sympy import expand, sympify, latex, Float
 from math import pi
-from galopy.genetic_algorithm import *
+from galopy.circuit_search import *
 import random
 
 
@@ -45,8 +45,8 @@ def gen_random_search(device, max_depth, max_states, max_modes, max_photons, max
 
     n_success_measurements = 1
 
-    return GeneticAlgorithm(device, matrix, basic_states, depth=depth, n_ancilla_modes=n_ancilla_modes,
-                            n_ancilla_photons=n_ancilla_photons, n_success_measurements=n_success_measurements)
+    return CircuitSearch(device, matrix, basic_states, depth=depth, n_ancilla_modes=n_ancilla_modes,
+                         n_ancilla_photons=n_ancilla_photons, n_success_measurements=n_success_measurements)
 
 
 def build_unitary(phi, theta, lambd, dim, mode0, mode1):

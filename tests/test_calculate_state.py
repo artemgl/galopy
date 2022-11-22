@@ -24,11 +24,9 @@ class CalculateState(unittest.TestCase):
             n_states = basic_states.shape[0]
 
             n_parents = random.randint(1, self._max_population)
-            population = search._GeneticAlgorithm__gen_random_population(n_parents)
+            population = search._CircuitSearch__gen_random_population(n_parents)
 
-            p = search._GeneticAlgorithm__build_permutation_matrix()
-            n, n_inv = search._GeneticAlgorithm__build_normalization_matrix(p)
-            actuals = search._GeneticAlgorithm__calculate_state(population, p, n, n_inv)
+            actuals = search._CircuitSearch__calculate_state(population)
 
             for j in range(n_parents):
                 common_index = population[j, 5 * depth:5 * depth + n_ancilla_photons].numpy().tolist()

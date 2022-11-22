@@ -9,38 +9,37 @@ from time import time
 RADIANS = pi / 18000.
 
 
-class GeneticAlgorithm:
-    # TODO: n_success_measurements может быть равен 0, если нет дополнительных фотонов
+class CircuitSearch:
     def __init__(self, device: str, matrix, input_basic_states, output_basic_states=None, depth=1,
                  n_ancilla_modes=0, n_ancilla_photons=0, n_success_measurements=1):
         """
-        Algorithm searching a circuit
-            Parameters:
-                device: The device on which you want to store data and perform calculations (e.g. 'cuda')
+        Algorithm searching a circuit.
+        Parameters:
+            device: The device on which you want to store data and perform calculations (e.g. 'cuda')
 
-                matrix: Matrix representing desired transform in the basis of basic states
+            matrix: Matrix representing desired transform in the basis of basic states
 
-                input_basic_states: Basic states on which transform is performed
+            input_basic_states: Basic states on which transform is performed
 
-                output_basic_states: Basic states which are counted as output
+            output_basic_states: Basic states which are counted as output
 
-                depth: Number of local two-mode unitary transforms. One transform contains two phase shifters and one
-                beam splitter. Must be > 0
+            depth: Number of local two-mode unitary transforms. One transform contains two phase shifters and one
+            beam splitter. Must be > 0
 
-                n_ancilla_modes: Number of modes in which ancilla photons are
+            n_ancilla_modes: Number of modes in which ancilla photons are
 
-                n_ancilla_photons: Number of ancilla photons
+            n_ancilla_photons: Number of ancilla photons
 
-                n_success_measurements: Count of measurements that we consider as successful gate operation. Must be > 0
+            n_success_measurements: Count of measurements that we consider as successful gate operation. Must be > 0
         """
         if n_ancilla_modes == 0 and n_ancilla_photons > 0:
             raise Exception("If number of ancilla modes is zero, number of ancilla photons must be zero as well")
 
         self.device = device
 
-        self.matrix = torch.tensor(matrix, device=self.device, dtype=torch.complex64, requires_grad=False)
+        self.matrix = torch.tensor(matrix, device=self.device, dtype=torch.complex64)
 
-        input_basic_states, _ = torch.tensor(input_basic_states, device=self.device, requires_grad=False).sort()
+        input_basic_states, _ = torch.tensor(input_basic_states, device=self.device).sort()
         self.input_basic_states = input_basic_states + n_ancilla_modes
         # Number of input basic states
         self.n_input_basic_states = self.input_basic_states.shape[0]
@@ -83,6 +82,32 @@ class GeneticAlgorithm:
         self._start_idx_modes = 3 * self.depth
         self._start_idx_ancilla_state_in = 5 * self.depth
         self._start_idx_ancilla_state_out = 5 * self.depth + self.n_ancilla_photons
+
+        self.__precompute_extra()
+
+    def __precompute_extra(self):
+        """Compute auxiliary objects before run to optimize calculations."""
+        # Precompute matrices
+        self._permutation_matrix = self.__build_permutation_matrix()
+        normalization_matrix, inverted_normalization_matrix =\
+            self.__build_normalization_matrix(self._permutation_matrix)
+        self._normalization_matrix = normalization_matrix
+        self._inverted_normalization_matrix = inverted_normalization_matrix
+
+        # Masks to get indices of modes in method __read_scheme_unitary()
+        self._mask_modes_2 = torch.tensor([[self._start_idx_modes + 2 * i,
+                                            self._start_idx_modes + 2 * i,
+                                            self._start_idx_modes + 2 * i + 1,
+                                            self._start_idx_modes + 2 * i + 1]
+                                           for i in range(self.depth)], dtype=torch.long, device=self.device)
+        self._mask_modes_3 = torch.tensor([[self._start_idx_modes + 2 * i,
+                                            self._start_idx_modes + 2 * i + 1,
+                                            self._start_idx_modes + 2 * i,
+                                            self._start_idx_modes + 2 * i + 1]
+                                           for i in range(self.depth)], dtype=torch.long, device=self.device)
+
+        # Prepare mask for unitaries in method __read_scheme_unitary()
+        self._mask_for_unitaries = torch.eye(self.n_modes, device=self.device, dtype=torch.bool)
 
     # TODO: при нескольких измерениях не допускать повторяющиеся
     def __normalize_coeffs(self, population):
@@ -131,13 +156,17 @@ class GeneticAlgorithm:
                              5 * self.depth +  # 3 angles and 2 modes for each one
                              self.n_ancilla_photons * (1 +  # for initial state of ancilla photons
                                                        self.n_success_measurements)),  # results of measurements
-                            device=self.device, dtype=torch.int, requires_grad=False)
+                            device=self.device, dtype=torch.int)
 
         return self.__normalize_coeffs(res)
 
     # TODO: возможно через reshape без to_idx ?
     def __build_permutation_matrix(self):
-        """Create matrix for output state computing."""
+        """
+        Create matrix for output state computing.
+        Multiply by it state vector to sum up all like terms.
+        For example, vector (a0 * a1 + a1 * a0) will become 2 * a0 * a1
+        """
 
         def to_idx(*modes):
             """Convert multi-dimensional index to one-dimensional."""
@@ -156,8 +185,7 @@ class GeneticAlgorithm:
         all_indices = list(map(lambda x, y: [to_idx(*x), to_idx(*y)], normalized_indices, indices))
         vals = [1.] * len(all_indices)
 
-        return torch.sparse_coo_tensor(torch.tensor(all_indices, requires_grad=False).t(), vals, device=self.device,
-                                       dtype=torch.complex64, requires_grad=False)
+        return torch.sparse_coo_tensor(torch.tensor(all_indices).t(), vals, device=self.device, dtype=torch.complex64)
 
     def __build_normalization_matrix(self, permutation_matrix):
         """
@@ -168,42 +196,29 @@ class GeneticAlgorithm:
 
             Second matrix: operator -> Dirac    ( a^n -> sqrt(n!) * |n> )
         """
-        vector = torch.ones(permutation_matrix.shape[1], 1, device=self.device, dtype=torch.complex64,
-                            requires_grad=False)
+        vector = torch.ones(permutation_matrix.shape[1], 1, device=self.device, dtype=torch.complex64)
         vector = torch.sparse.mm(permutation_matrix, vector).to_sparse_coo()
 
         indices = vector.indices()[0].reshape(1, -1)
         indices = torch.cat((indices, indices))
         c = factorial(self.n_photons)
         norm_mtx = torch.sparse_coo_tensor(indices, (vector.values() / c).sqrt(),
-                                           size=permutation_matrix.shape, device=self.device, requires_grad=False)
+                                           size=permutation_matrix.shape, device=self.device)
         inv_norm_mtx = torch.sparse_coo_tensor(indices, (c / vector.values()).sqrt(),
-                                               size=permutation_matrix.shape, device=self.device, requires_grad=False)
+                                               size=permutation_matrix.shape, device=self.device)
 
         return norm_mtx, inv_norm_mtx
 
     def __read_scheme_unitary(self, population):
         """Read genome and return the unitary transformation of the scheme it represents."""
-        # Masks to get indices of modes
-        # TODO: Move to outer scope
-        mask_modes_2 = torch.tensor([[self._start_idx_modes + 2 * i,
-                                      self._start_idx_modes + 2 * i,
-                                      self._start_idx_modes + 2 * i + 1,
-                                      self._start_idx_modes + 2 * i + 1]
-                                     for i in range(self.depth)], dtype=torch.long, device=self.device)
-        mask_modes_3 = torch.tensor([[self._start_idx_modes + 2 * i,
-                                      self._start_idx_modes + 2 * i + 1,
-                                      self._start_idx_modes + 2 * i,
-                                      self._start_idx_modes + 2 * i + 1]
-                                     for i in range(self.depth)], dtype=torch.long, device=self.device)
         # Indices to slice correctly
         # TODO: Move to outer scope
         indices_0 = torch.tensor([[i] * 4 * self.depth for i in range(population.shape[0])], device=self.device)\
             .reshape(-1, self.depth, 4)
         indices_1 = torch.tensor([[i, i, i, i] for i in range(self.depth)] * population.shape[0], device=self.device)\
             .reshape(-1, self.depth, 4)
-        indices_2 = population[:, mask_modes_2]
-        indices_3 = population[:, mask_modes_3]
+        indices_2 = population[:, self._mask_modes_2]
+        indices_3 = population[:, self._mask_modes_3]
 
         # Get angles
         phies = population[:, self._start_idx_rz_angles:self._start_idx_rz_angles + self.depth]
@@ -221,9 +236,7 @@ class GeneticAlgorithm:
         # Create an unitary for each triple of angles
         unitaries = torch.zeros(population.shape[0], self.depth, self.n_modes, self.n_modes,
                                 device=self.device, dtype=torch.complex64)
-        # TODO: Move mask to outer scope
-        mask = torch.eye(self.n_modes, device=self.device, dtype=torch.bool)
-        unitaries[:, :, mask] = 1.
+        unitaries[:, :, self._mask_for_unitaries] = 1.
         unitaries[indices_0.long(), indices_1.long(), indices_2.long(), indices_3.long()] = unitaries_coeffs
 
         # Multiply all the unitaries to get one for the whole scheme
@@ -235,7 +248,7 @@ class GeneticAlgorithm:
 
     def __construct_state(self, population):
         """Create the initial state in Dirac form."""
-        # TODO: move size to outer scope
+        # TODO: move size to outer scope ?
         size = [population.shape[0], self.n_input_basic_states] + [self.n_modes] * self.n_photons + [1]
 
         # TODO: outer scope ?
@@ -247,7 +260,7 @@ class GeneticAlgorithm:
         ancilla_photons =\
             population[:, self._start_idx_ancilla_state_in:self._start_idx_ancilla_state_in + self.n_ancilla_photons]
 
-        # TODO: outer scope
+        # TODO: outer scope ?
         if self.n_ancilla_photons > 0:
             indices = torch.cat((sub_indices_0, sub_indices_1,
                                  ancilla_photons[sub_indices_0.reshape(-1)].reshape(-1, self.n_ancilla_photons),
@@ -262,24 +275,22 @@ class GeneticAlgorithm:
 
         return torch.sparse_coo_tensor(indices, values, size=size, device=self.device)
 
-    # TODO: move args to private fields
-    def __calculate_state(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
+    def __calculate_state(self, population):
         """Express initial state in terms of output birth operators and transform to Dirac form."""
         # TODO: move size and size_mtx to outer scope ?
         # TODO: create state_vector once at the beginning ?
-        # Create state vector in Dirac form
         size_mtx = [population.shape[0]] + [1] * self.n_photons + [self.n_modes] * 2
 
+        # Create state vector in Dirac form
         state_vector = self.__construct_state(population).to_dense()
-        # TODO: remove!!!
-        size = [population.shape[0], self.n_input_basic_states] + [self.n_modes] * self.n_photons + [1]
+        vector_shape = state_vector.shape
 
         # Normalize (transform to operator form)
         state_vector = state_vector.reshape(population.shape[0] * self.n_input_basic_states, -1)
         state_vector.t_()
-        state_vector = torch.sparse.mm(normalization_matrix, state_vector)
+        state_vector = torch.sparse.mm(self._normalization_matrix, state_vector)
         state_vector.t_()
-        state_vector = state_vector.reshape(*size)
+        state_vector = state_vector.reshape(vector_shape)
 
         # Get unitary transforms
         unitaries = self.__read_scheme_unitary(population)
@@ -298,15 +309,21 @@ class GeneticAlgorithm:
         state_vector.t_()
         # TODO: Vector to sparse coo before multiplying
         # Sum up indistinguishable states with precomputed permutation matrix
-        state_vector = torch.sparse.mm(permutation_matrix, state_vector)
+        state_vector = torch.sparse.mm(self._permutation_matrix, state_vector)
         # Transform to Dirac form
-        state_vector = torch.sparse.mm(inv_normalization_matrix, state_vector)
+        state_vector = torch.sparse.mm(self._inverted_normalization_matrix, state_vector)
         state_vector.t_()
-        state_vector = state_vector.reshape(*size)
+        state_vector = state_vector.reshape(vector_shape)
 
         return state_vector.to_sparse_coo()
 
     def __construct_transforms(self, population, state_vector):
+        """
+        Construct transforms which are represented by circuits.
+        Output matrices will be n_output_basic_states * n_input_basic_states.
+        So, these matrices show how input basic states will be represented via superposition of output basic states
+        after gate performing.
+        """
         n_population = population.shape[0]
         n_state_photons = self.input_basic_states.shape[1]
 
@@ -341,6 +358,7 @@ class GeneticAlgorithm:
                                                                 self.n_output_basic_states, self.n_input_basic_states)
 
     def __calculate_fidelity_and_probability(self, transforms):
+        """Given transforms, get fidelity and probability for each one."""
         if self.n_success_measurements == 1:
             # Probabilities
 
@@ -380,15 +398,14 @@ class GeneticAlgorithm:
         else:
             raise Exception("Not implemented yet! Number of success measurements should be 1 so far")
 
-    # TODO: хранить эти матрицы в поле класса, а не передавать как параметр везде
-    def __get_fidelity_and_probability(self, population, permutation_matrix, normalization_matrix,
-                                       inv_normalization_matrix):
-        state = self.__calculate_state(population,
-                                       permutation_matrix, normalization_matrix, inv_normalization_matrix)
+    def __get_fidelity_and_probability(self, population):
+        """Given population of circuits, get fidelity and probability for each circuit."""
+        state = self.__calculate_state(population)
         transforms = self.__construct_transforms(population, state)
         return self.__calculate_fidelity_and_probability(transforms)
 
     def __crossover(self, n_offsprings, parents):
+        """Get random dads and moms from the given population and perform crossover."""
         dads = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
         dads = parents[dads, ...]
 
@@ -400,6 +417,7 @@ class GeneticAlgorithm:
         return self.__normalize_coeffs(torch.where(mask, dads, moms))
 
     def __mutate(self, mutation_probability, max_mutation, n_mutated, population):
+        """Mutate the given number of individuals from population."""
         perm = torch.randperm(population.shape[0], device=self.device)[:n_mutated]
         sub_population = population[perm]
 
@@ -409,28 +427,50 @@ class GeneticAlgorithm:
         mutated[mask] += deltas
         return self.__normalize_coeffs(mutated)
 
-    def __calculate_fitness(self, population, permutation_matrix, normalization_matrix, inv_normalization_matrix):
-        fidelities, probabilities = self.__get_fidelity_and_probability(population,
-                                                                        permutation_matrix,
-                                                                        normalization_matrix, inv_normalization_matrix)
+    def __calculate_fitness(self, population):
+        """Compute fitness for each individual in the given population."""
+        fidelities, probabilities = self.__get_fidelity_and_probability(population)
         return torch.where(fidelities > 0.999, 1000. * probabilities, fidelities)
 
     def __select(self, population, fitness, n_to_select):
+        """
+        Select the given number of individuals from population.
+        The choice is based on the fitness.
+        """
         fitness, indices = torch.topk(fitness, n_to_select)
         return population[indices, ...], fitness
 
     def run(self, min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite,
             source_file=None, result_file=None):
+        """
+        Launch search. The algorithm stops in one of these cases:
+            * After n_generations generations
+            * If the circuit with fidelity > 0.999 and probability > min_probability is found
 
+        Parameters:
+            min_probability: Minimum required probability of the gate.
+
+            n_generations: Maximum number of generations to happen.
+
+            n_population: Number of individuals at each generation.
+
+            n_offsprings: Number of offsprings at each generation.
+
+            n_mutated: Number of mutated individuals at each generation. Mutation happens on random individuals,
+            approximately half of genes are mutated.
+
+            n_elite: Number of individuals with the best fitness, that are guaranteed to pass into the next
+            generation.
+
+            source_file: The file to read initial population. If is None, then random population is generated.
+
+            result_file: The file to write the result population to. If is None, the data won't be written anywhere.
+        """
         if n_elite > n_population:
             raise Exception("Number of elite can't be bigger than {threshold}.".format(threshold=n_population))
 
         # Save start time
         start_time = time()
-
-        # Precompute matrices
-        permutation_matrix = self.__build_permutation_matrix()
-        normalization_matrix, inverted_normalization_matrix = self.__build_normalization_matrix(permutation_matrix)
 
         # Get initial population
         if source_file is None:
@@ -446,8 +486,7 @@ class GeneticAlgorithm:
                 population = circuits
 
         # Calculate fitness for the initial population
-        fitness = self.__calculate_fitness(population, permutation_matrix,
-                                           normalization_matrix, inverted_normalization_matrix)
+        fitness = self.__calculate_fitness(population)
 
         for i in range(n_generations):
             # Create new generation
@@ -456,8 +495,7 @@ class GeneticAlgorithm:
             new_individuals = torch.cat((children, mutated), 0)
 
             # Calculate fitness for the new individuals
-            new_fitness = self.__calculate_fitness(new_individuals, permutation_matrix,
-                                                   normalization_matrix, inverted_normalization_matrix)
+            new_fitness = self.__calculate_fitness(new_individuals)
 
             # Select individuals
             new_individuals, new_fitness = self.__select(new_individuals, new_fitness, n_population - n_elite)
@@ -490,9 +528,7 @@ class GeneticAlgorithm:
         # Print result info
         print("Circuit:")
         print_circuit(population[0], self.depth, self.n_ancilla_photons)
-        f, p = self.__get_fidelity_and_probability(population[0].reshape(1, -1),
-                                                   permutation_matrix,
-                                                   normalization_matrix, inverted_normalization_matrix)
+        f, p = self.__get_fidelity_and_probability(population[0].reshape(1, -1))
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())
         print(f"Processed {n_generations} generations in {time() - start_time:.2f} seconds")
