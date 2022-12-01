@@ -137,7 +137,10 @@ class LoNet(torch.nn.Module):
         sin_s = torch.sin(self.alphas.weight).reshape(-1)
         cos_s = torch.cos(self.alphas.weight).reshape(-1)
         exp_beta_s = torch.exp(1.j * self.betas.weight).reshape(-1)
-        exp_gamma_s = torch.exp(1.j * self.gammas.weight).reshape(-1)
+        # TODO: optimize!
+        exp_gamma_s = torch.exp(1.j * self.gammas.weight[:, :-1]).reshape(-1)
+        first_gamma = torch.tensor([1.], dtype=torch.complex64, device=self.device)
+        exp_gamma_s = torch.cat((exp_gamma_s, first_gamma), 0)
 
         transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
 
@@ -241,7 +244,7 @@ class LoNet(torch.nn.Module):
         if self.n_measurements > 0:
             state_vector = state_vector[self.measurements_packed.view(-1).long(), ...]
 
-        return state_vector[..., self.output_basic_states_packed.view(-1).long()]
+        return state_vector[:, self.output_basic_states_packed.view(-1).long(), :]
 
     def __calculate_fidelity_and_probability(self, transforms):
         """Given transforms, get fidelity and probability for each one."""
@@ -283,3 +286,12 @@ class LoNet(torch.nn.Module):
 
     def loss(self, f, p):
         return f.max()
+
+    def loss2(self, f, p):
+        # p_min = 1. / 16.
+        # p_min = 1. / 9.
+
+        # return ((f - p) * (1. + torch.sign(p - p_min)) + 2. * p).max()
+        # return (f - torch.abs(f - p / p_min)).max()
+        return f.max()
+        # return torch.where(p < 1. / 9., p, f).max()
