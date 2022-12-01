@@ -72,7 +72,7 @@ class CircuitSearch:
         self.n_state_photons = input_basic_states.shape[1]
         self.n_ancilla_photons = n_ancilla_photons
         # Total number of photons
-        self.n_photons = input_basic_states.shape[1] + n_ancilla_photons
+        self.n_photons = self.n_state_photons + n_ancilla_photons
 
         self.n_success_measurements = n_success_measurements
 
