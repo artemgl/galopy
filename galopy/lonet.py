@@ -289,9 +289,12 @@ class LoNet(torch.nn.Module):
 
     def loss2(self, f, p):
         # p_min = 1. / 16.
-        # p_min = 1. / 9.
+        p_min = 1. / 9.
 
         # return ((f - p) * (1. + torch.sign(p - p_min)) + 2. * p).max()
         # return (f - torch.abs(f - p / p_min)).max()
-        return f.max()
+        # return (f * p).max()
+        # return torch.where(p < p_min, f, -p).max()
+        return (-p).max()
+        # return f.max()
         # return torch.where(p < 1. / 9., p, f).max()

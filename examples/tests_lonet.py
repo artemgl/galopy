@@ -104,6 +104,7 @@ if __name__ == '__main__':
     # target_matrix = torch.flip(target_matrix, (0, 1))  # Повернуть на 90 градусов
 
     # input_basic_states = np.array([[0], [1], [2], [3], [4], [5]])
+    # input_basic_states = np.array([[1], [0]])
 
     input_basic_states = np.array([[0, 2],
                                    [0, 3],
@@ -151,8 +152,8 @@ if __name__ == '__main__':
     net_copy = net
     # net_copy = copy.deepcopy(net)
     # net_copy.to(device)
-    optimizer = torch.optim.Adam(net_copy.parameters(), lr=0.1, maximize=True)
-    # optimizer = torch.optim.SGD(net_copy.parameters(), lr=0.01, nesterov=True, momentum=1., maximize=True)
+    optimizer = torch.optim.Adam(net_copy.parameters(), lr=0.05, maximize=True)
+    # optimizer = torch.optim.SGD(net_copy.parameters(), lr=0.01, nesterov=True, momentum=0.95, maximize=True)
     f_history, p_history = run_method(net_copy, net_copy.loss2, optimizer, epochs)
     plt.plot(f_history, label="Fidelity")
     plt.plot(p_history, label="Probability")
