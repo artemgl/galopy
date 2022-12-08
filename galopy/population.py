@@ -1,0 +1,379 @@
+import torch
+import pandas as pd
+from math import tau, factorial
+from itertools import product
+import json
+
+
+def random(perm_mtx, norm_mtx, inv_norm_mtx, n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=0,
+           n_ancilla_photons=0, n_success_measurements=0, device='cpu'):
+    bs_angles = torch.rand(n_individuals, depth, 2, device=device) * tau
+    ps_angles = torch.rand(n_individuals, n_modes - 1, device=device) * tau
+
+    topologies = torch.randint(0, n_modes, (n_individuals, depth, 2), device=device, dtype=torch.int8)
+
+    if n_ancilla_modes > 0:
+        initial_ancilla_states = torch.randint(0, n_ancilla_modes,
+                                               (n_individuals, n_ancilla_photons),
+                                               device=device, dtype=torch.int8)
+        measurements = torch.randint(0, n_ancilla_modes,
+                                     (n_individuals, n_success_measurements, n_ancilla_photons),
+                                     device=device, dtype=torch.int8)
+    else:
+        initial_ancilla_states = torch.tensor([[]])
+        measurements = torch.tensor([[[]]])
+
+    return Population(perm_mtx, norm_mtx, inv_norm_mtx,
+                      bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
+                      n_modes, n_ancilla_modes, device)
+
+
+def from_file(file_name, perm_mtx, norm_mtx, inv_norm_mtx, device='cpu'):
+    with open(file_name, 'r') as f:
+        n_modes = int(f.readline())
+        n_ancilla_modes = int(f.readline())
+        bs_angles = torch.tensor(json.loads(f.readline()), device=device)
+        ps_angles = torch.tensor(json.loads(f.readline()), device=device)
+        topologies = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
+        initial_ancilla_states = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
+        measurements = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
+
+    return Population(perm_mtx, norm_mtx, inv_norm_mtx,
+                      bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
+                      n_modes, n_ancilla_modes, device)
+
+
+class Population:
+    def __init__(self, perm_mtx, norm_mtx, inv_norm_mtx,
+                 bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
+                 n_modes, n_ancilla_modes,
+                 device='cpu'):
+        """Read the population from file."""
+        self._permutation_matrix = perm_mtx
+        self._normalization_matrix = norm_mtx
+        self._inverted_normalization_matrix = inv_norm_mtx
+        self.device = device
+
+        # TODO: проверка согласованности размерностей
+        self.n_individuals = bs_angles.shape[0]
+        self.depth = bs_angles.shape[1]
+        self.n_modes = n_modes
+        self.n_work_modes = self.n_modes
+        self.n_ancilla_photons = initial_ancilla_states.shape[1]
+        self.n_ancilla_modes = n_ancilla_modes
+        self.n_success_measurements = measurements.shape[1]
+
+        self._bs_angles = bs_angles
+        self._ps_angles = ps_angles
+        self._topologies = topologies
+        self._initial_ancilla_states = initial_ancilla_states
+        self._measurements = measurements
+        self._normalize_data()
+
+        self._precompute_extra()
+
+    def print(self, i=None):
+        if i is None:
+            print(self._bs_angles)
+            print(self._ps_angles)
+            print(self._topologies)
+            print(self._initial_ancilla_states)
+            print(self._measurements)
+        else:
+            pass
+
+    def to_file(self, file_name):
+        """Write data to file."""
+        with open(file_name, 'w') as f:
+            f.write(str(self.n_modes))
+            f.write("\n")
+            f.write(str(self.n_ancilla_modes))
+            f.write("\n")
+            f.write(json.dumps(self._bs_angles.cpu().numpy().tolist()))
+            f.write("\n")
+            f.write(json.dumps(self._ps_angles.cpu().numpy().tolist()))
+            f.write("\n")
+            f.write(json.dumps(self._topologies.cpu().numpy().tolist()))
+            f.write("\n")
+            f.write(json.dumps(self._initial_ancilla_states.cpu().numpy().tolist()))
+            f.write("\n")
+            f.write(json.dumps(self._measurements.cpu().numpy().tolist()))
+
+    # TODO: при нескольких измерениях не допускать повторяющиеся
+    def _normalize_data(self):
+        """
+        Bring the data to a convenient form.
+        """
+        self._bs_angles %= tau
+        self._ps_angles %= tau
+
+        self._topologies %= self.n_work_modes
+        # self._topologies[..., 1] = torch.where(self._topologies[..., 0] == self._topologies[..., 1],
+        #                                        (1 + self._topologies[..., 1]) % self.n_work_modes,
+        #                                        self._topologies[..., 1])
+        x = self._topologies[..., 0]
+        y = self._topologies[..., 1]
+        mask = x == y
+        y[mask] += 1
+        y[mask] %= self.n_work_modes
+        self._topologies, _ = self._topologies.sort()
+
+        if self.n_ancilla_modes > 0:
+            self._initial_ancilla_states, _ = (self._initial_ancilla_states % self.n_ancilla_modes).sort()
+            self._measurements, _ = (self._measurements % self.n_ancilla_modes).sort()
+
+    def _precompute_extra(self):
+        """Compute auxiliary objects."""
+        # Prepare mask for unitaries in method __read_scheme_unitary()
+        self._mask_for_unitaries = torch.eye(self.n_modes, device=self.device, dtype=torch.bool)
+
+    def get_permutation_matrix(self, n_photons):
+        """
+        The matrix for output state computing.
+        Multiply by it state vector to sum up all like terms.
+        For example, vector (a0 * a1 + a1 * a0) will become 2 * a0 * a1
+        """
+        if not self._is_fresh_perm_mtx:
+            # TODO: возможно через reshape без to_idx ?
+            def to_idx(*modes):
+                """Convert multi-dimensional index to one-dimensional."""
+                res = 0
+                for mode in modes:
+                    res = res * self.n_modes + mode
+                return res
+
+            args = [list(range(self.n_modes))] * n_photons
+            indices = [list(i) for i in product(*args)]
+
+            normalized_indices = [idx.copy() for idx in indices]
+            for idx in normalized_indices:
+                idx.sort()
+
+            all_indices = list(map(lambda x, y: [to_idx(*x), to_idx(*y)], normalized_indices, indices))
+            vals = [1.] * len(all_indices)
+
+            self._permutation_matrix = torch.sparse_coo_tensor(torch.tensor(all_indices).t(), vals, device=self.device,
+                                                               dtype=torch.complex64)
+            self._is_fresh_perm_mtx = True
+
+        return self._permutation_matrix
+
+    def get_normalization_matrix(self, n_photons):
+        """
+        Get matrices for transforming between two representations of state: Dirac form and operator form.
+        It's considered that operator acts on the vacuum state.
+
+            First matrix:  Dirac    -> operator ( |n> -> a^n / sqrt(n!) )
+
+            Second matrix: operator -> Dirac    ( a^n -> sqrt(n!) * |n> )
+        """
+        if not self._is_fresh_norm_mtx:
+            permutation_matrix = self.get_permutation_matrix(n_photons)
+
+            vector = torch.ones(permutation_matrix.shape[1], 1, device=self.device, dtype=torch.complex64)
+            vector = torch.sparse.mm(permutation_matrix, vector).to_sparse_coo()
+
+            indices = vector.indices()[0].reshape(1, -1)
+            indices = torch.cat((indices, indices))
+            c = factorial(n_photons)
+
+            self._normalization_matrix = torch.sparse_coo_tensor(indices, (vector.values() / c).sqrt(),
+                                                                 size=permutation_matrix.shape, device=self.device)
+            self._inverted_normalization_matrix = torch.sparse_coo_tensor(indices, (c / vector.values()).sqrt(),
+                                                                          size=permutation_matrix.shape,
+                                                                          device=self.device)
+            self._is_fresh_norm_mtx = True
+
+        return self._normalization_matrix, self._inverted_normalization_matrix
+
+    def __construct_input_state(self, input_states):
+        """Get input state in Dirac form."""
+        n_input_states = input_states.shape[0]
+        n_photons = input_states.shape[1] + self.n_ancilla_photons
+
+        # TODO: move size to outer scope ?
+        size = [self.n_individuals, n_input_states] + [self.n_modes] * n_photons + [1]
+
+        # TODO: outer scope ?
+        sub_indices_0 = torch.tensor([[i] * n_input_states for i in range(self.n_individuals)],
+                                     device=self.device).reshape(-1, 1)
+        sub_indices_1 = torch.tensor([list(range(n_input_states)) for _ in range(self.n_individuals)],
+                                     device=self.device).reshape(-1, 1)
+
+        # TODO: outer scope ?
+        if self.n_ancilla_photons > 0:
+            indices = torch.cat((sub_indices_0, sub_indices_1,
+                                 self._initial_ancilla_states[sub_indices_0.reshape(-1)]
+                                 .reshape(-1, self.n_ancilla_photons),
+                                 input_states[sub_indices_1.reshape(-1)],
+                                 torch.zeros_like(sub_indices_0, device=self.device)), 1).t()
+        else:
+            indices = torch.cat((sub_indices_0, sub_indices_1,
+                                 input_states[sub_indices_1.reshape(-1)],
+                                 torch.zeros_like(sub_indices_0, device=self.device)), 1).t()
+
+        values = torch.ones(indices.shape[1], device=self.device, dtype=torch.complex64)
+
+        return torch.sparse_coo_tensor(indices, values, size=size, device=self.device)
+
+    def __read_scheme_unitary(self):
+        """Read genome and return the unitary transformation of the scheme it represents."""
+        depth = self._topologies.shape[1]
+
+        # Indices to slice correctly
+        # TODO: Move to outer scope
+        indices_0 = torch.tensor([[i] * 4 * depth for i in range(self.n_individuals)], device=self.device)\
+            .reshape(-1, depth, 4)
+        indices_1 = torch.tensor([[i, i, i, i] for i in range(depth)] * self.n_individuals, device=self.device)\
+            .reshape(-1, depth, 4)
+        indices_2 = self._topologies[..., [0, 0, 1, 1]]
+        indices_3 = self._topologies[..., [0, 1, 0, 1]]
+
+        # Get angles
+        thetas = self._bs_angles[..., 0]
+        phis = self._bs_angles[..., 1]
+
+        # Write unitary coefficients for each beam splitter
+        unitaries_coeffs = torch.zeros(self.n_individuals, depth, 4, device=self.device, dtype=torch.complex64)
+        unitaries_coeffs[:, :, 0] = torch.cos(thetas)
+        unitaries_coeffs[:, :, 1] = -torch.exp(1.j * phis) * torch.sin(thetas)
+        unitaries_coeffs[:, :, 2] = torch.exp(-1.j * phis) * torch.sin(thetas)
+        unitaries_coeffs[:, :, 3] = torch.cos(thetas)
+
+        # Create an unitary for each beam splitter
+        unitaries = torch.zeros(self.n_individuals, depth, self.n_modes, self.n_modes,
+                                device=self.device, dtype=torch.complex64)
+        unitaries[:, :, self._mask_for_unitaries] = 1.
+        unitaries[indices_0.long(), indices_1.long(), indices_2.long(), indices_3.long()] = unitaries_coeffs
+
+        # Multiply all the unitaries to get one for the whole scheme
+        # TODO: Optimize
+        for i in range(1, depth):
+            unitaries[:, 0] = unitaries[:, i].matmul(unitaries[:, 0])
+
+        return unitaries[:, 0].clone()
+
+    def __construct_output_state(self, n_input_states, n_photons, state_vector):
+        """Get full output state in Dirac form."""
+        # TODO: move size and size_mtx to outer scope ?
+        # TODO: create state_vector once at the beginning ?
+        size_mtx = [self.n_individuals] + [1] * n_photons + [self.n_modes] * 2
+
+        perm_mtx = self.get_permutation_matrix(n_photons)
+        norm_mtx, inv_norm_mtx = self.get_normalization_matrix(n_photons)
+
+        # Create state vector in Dirac form
+        vector_shape = state_vector.shape
+
+        # Normalize (transform to operator form)
+        state_vector = state_vector.reshape(self.n_individuals * n_input_states, -1)
+        state_vector.t_()
+        state_vector = torch.sparse.mm(norm_mtx, state_vector)
+        state_vector.t_()
+        state_vector = state_vector.reshape(vector_shape)
+
+        # Get unitary transforms
+        unitaries = self.__read_scheme_unitary()
+        unitaries = unitaries.reshape(*size_mtx)
+
+        # Apply unitaries to all photons in state
+        state_vector = unitaries.matmul(state_vector)
+        # TODO: matrix reshape instead of vector transposing ?
+        # TODO: Optimize? (Maybe firstly have sparse vector, then convert it to dense before some iteration)
+        for i in range(n_photons - 1):
+            state_vector.transpose_(-3 - i, -2)
+            state_vector = unitaries.matmul(state_vector)
+            state_vector.transpose_(-3 - i, -2)
+
+        state_vector = state_vector.reshape(self.n_individuals * n_input_states, -1)
+        state_vector.t_()
+        # TODO: Vector to sparse coo before multiplying
+        # Sum up indistinguishable states with precomputed permutation matrix
+        state_vector = torch.sparse.mm(perm_mtx, state_vector)
+        # Transform to Dirac form
+        state_vector = torch.sparse.mm(inv_norm_mtx, state_vector)
+        state_vector.t_()
+        state_vector = state_vector.reshape(vector_shape)
+
+        return state_vector.to_sparse_coo()
+
+    def __extract_output_states(self, n_state_photons, n_input_states, state_vector, output_states):
+        """Given the full output vector, get just output sub-vector."""
+        n_output_states = output_states.shape[0]
+
+        # TODO: precompute ?
+        indices_0 = torch.tensor([[i] * n_input_states * n_output_states *
+                                  self.n_success_measurements for i in range(self.n_individuals)],
+                                 device=self.device, dtype=torch.long).reshape(-1)
+        indices_1 = torch.tensor(list(range(n_input_states))
+                                 * n_output_states * self.n_success_measurements * self.n_individuals,
+                                 device=self.device, dtype=torch.long).reshape(-1)
+        indices_3 = torch.tensor([[i] * n_input_states for i in range(n_output_states)]
+                                 * self.n_individuals * self.n_success_measurements,
+                                 device=self.device, dtype=torch.long).reshape(-1)
+
+        a = (indices_0, indices_1)
+        indices_3 = output_states[indices_3].long().reshape(-1, n_state_photons)
+        c = tuple(indices_3[:, i] for i in range(n_state_photons))
+
+        if self.n_ancilla_photons > 0:
+            ancillas = self._measurements.long().reshape(self.n_individuals, self.n_success_measurements, -1)
+
+            indices_2 = torch.tensor([[i] * n_input_states * n_output_states
+                                      for i in range(self.n_success_measurements)] * self.n_individuals,
+                                     device=self.device, dtype=torch.long).reshape(-1)
+            indices_2 = ancillas[indices_0, indices_2].reshape(-1, self.n_ancilla_photons)
+            b = tuple(indices_2[:, i] for i in range(self.n_ancilla_photons))
+            indices = sum((a, b, c, (0,)), ())
+        else:
+            indices = sum((a, c, (0,)), ())
+
+        return state_vector.to_dense()[indices].clone().reshape(self.n_individuals, self.n_success_measurements,
+                                                                n_output_states, n_input_states)
+
+    def construct_transforms(self, input_states, output_states):
+        """
+        Construct transforms which are represented by circuits.
+        Output matrices have shape (n_output_states, n_input_states).
+        So, these matrices show how input states will be represented via superposition of
+        output states after gate performing.
+        """
+        input_state_vector = self.__construct_input_state(input_states)
+        full_output_state_vector = self.__construct_output_state(input_states.shape[0],
+                                                                 input_states.shape[1] + self.n_ancilla_photons,
+                                                                 input_state_vector)
+        return self.__extract_output_states(input_states.shape[1],
+                                            input_states.shape[0],
+                                            full_output_state_vector,
+                                            output_states)
+
+    def crossover(self, n_offsprings, parents):
+        """Get random dads and moms from the given population and perform crossover."""
+        dads = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
+        dads = parents[dads, ...]
+
+        moms = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
+        moms = parents[moms, ...]
+
+        mask = torch.rand(size=dads.shape, dtype=torch.float, device=self.device) < 0.5
+
+        return self.__normalize_coeffs(torch.where(mask, dads, moms))
+
+    def mutate(self, mutation_probability, max_mutation, n_mutated, population):
+        """Mutate the given number of individuals from population."""
+        perm = torch.randperm(population.shape[0], device=self.device)[:n_mutated]
+        sub_population = population[perm]
+
+        mask = torch.rand(size=sub_population.shape, dtype=torch.float, device=self.device) < mutation_probability
+        deltas = torch.randint(-max_mutation, max_mutation, size=(mask.sum().item(),), device=self.device)
+        mutated = sub_population.clone()
+        mutated[mask] += deltas
+        return self.__normalize_coeffs(mutated)
+
+    def select(self, population, fitness, n_to_select):
+        """
+        Select the given number of individuals from population.
+        The choice is based on the fitness.
+        """
+        fitness, indices = torch.topk(fitness, n_to_select)
+        return population[indices, ...], fitness
