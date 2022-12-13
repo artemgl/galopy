@@ -1,7 +1,6 @@
 import torch
 import pandas as pd
-from math import tau, factorial
-from itertools import product
+from math import tau
 import json
 
 
@@ -127,65 +126,6 @@ class Population:
         # Prepare mask for unitaries in method __read_scheme_unitary()
         self._mask_for_unitaries = torch.eye(self.n_modes, device=self.device, dtype=torch.bool)
 
-    def get_permutation_matrix(self, n_photons):
-        """
-        The matrix for output state computing.
-        Multiply by it state vector to sum up all like terms.
-        For example, vector (a0 * a1 + a1 * a0) will become 2 * a0 * a1
-        """
-        if not self._is_fresh_perm_mtx:
-            # TODO: возможно через reshape без to_idx ?
-            def to_idx(*modes):
-                """Convert multi-dimensional index to one-dimensional."""
-                res = 0
-                for mode in modes:
-                    res = res * self.n_modes + mode
-                return res
-
-            args = [list(range(self.n_modes))] * n_photons
-            indices = [list(i) for i in product(*args)]
-
-            normalized_indices = [idx.copy() for idx in indices]
-            for idx in normalized_indices:
-                idx.sort()
-
-            all_indices = list(map(lambda x, y: [to_idx(*x), to_idx(*y)], normalized_indices, indices))
-            vals = [1.] * len(all_indices)
-
-            self._permutation_matrix = torch.sparse_coo_tensor(torch.tensor(all_indices).t(), vals, device=self.device,
-                                                               dtype=torch.complex64)
-            self._is_fresh_perm_mtx = True
-
-        return self._permutation_matrix
-
-    def get_normalization_matrix(self, n_photons):
-        """
-        Get matrices for transforming between two representations of state: Dirac form and operator form.
-        It's considered that operator acts on the vacuum state.
-
-            First matrix:  Dirac    -> operator ( |n> -> a^n / sqrt(n!) )
-
-            Second matrix: operator -> Dirac    ( a^n -> sqrt(n!) * |n> )
-        """
-        if not self._is_fresh_norm_mtx:
-            permutation_matrix = self.get_permutation_matrix(n_photons)
-
-            vector = torch.ones(permutation_matrix.shape[1], 1, device=self.device, dtype=torch.complex64)
-            vector = torch.sparse.mm(permutation_matrix, vector).to_sparse_coo()
-
-            indices = vector.indices()[0].reshape(1, -1)
-            indices = torch.cat((indices, indices))
-            c = factorial(n_photons)
-
-            self._normalization_matrix = torch.sparse_coo_tensor(indices, (vector.values() / c).sqrt(),
-                                                                 size=permutation_matrix.shape, device=self.device)
-            self._inverted_normalization_matrix = torch.sparse_coo_tensor(indices, (c / vector.values()).sqrt(),
-                                                                          size=permutation_matrix.shape,
-                                                                          device=self.device)
-            self._is_fresh_norm_mtx = True
-
-        return self._normalization_matrix, self._inverted_normalization_matrix
-
     def __construct_input_state(self, input_states):
         """Get input state in Dirac form."""
         n_input_states = input_states.shape[0]
@@ -259,8 +199,8 @@ class Population:
         # TODO: create state_vector once at the beginning ?
         size_mtx = [self.n_individuals] + [1] * n_photons + [self.n_modes] * 2
 
-        perm_mtx = self.get_permutation_matrix(n_photons)
-        norm_mtx, inv_norm_mtx = self.get_normalization_matrix(n_photons)
+        perm_mtx = self._permutation_matrix
+        norm_mtx, inv_norm_mtx = self._normalization_matrix, self._inverted_normalization_matrix
 
         # Create state vector in Dirac form
         vector_shape = state_vector.shape
@@ -347,17 +287,25 @@ class Population:
                                             full_output_state_vector,
                                             output_states)
 
-    def crossover(self, n_offsprings, parents):
-        """Get random dads and moms from the given population and perform crossover."""
-        dads = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
-        dads = parents[dads, ...]
+    def crossover(self, n_offsprings):
+        """Get random dads and moms and perform crossover."""
+        dads = torch.randint(0, self.n_individuals, size=(n_offsprings,), device=self.device)
+        moms = torch.randint(0, self.n_individuals, size=(n_offsprings,), device=self.device)
 
-        moms = torch.randint(0, parents.shape[0], size=(n_offsprings,), device=self.device)
-        moms = parents[moms, ...]
+        separators = torch.randint(0, self.depth, size=(n_offsprings,), device=self.device)
+        mask = torch.zeros(n_offsprings, self.depth, dtype=torch.bool)
+        mask.scatter_(dim=1, index=separators, value=True)
+        mask = torch.cumsum(mask, dim=1)
 
-        mask = torch.rand(size=dads.shape, dtype=torch.float, device=self.device) < 0.5
+        bs_angles = torch.where(mask, self._bs_angles[moms, ...], self._bs_angles[dads, ...])
+        ps_angles = self._ps_angles[moms, ...]
+        topologies = torch.where(mask, self._topologies[moms, ...], self._topologies[dads, ...])
+        initial_ancilla_states = self._initial_ancilla_states[dads, ...]
+        measurements = self._measurements[moms, ...]
 
-        return self.__normalize_coeffs(torch.where(mask, dads, moms))
+        return Population(self._permutation_matrix, self._normalization_matrix, self._inverted_normalization_matrix,
+                          bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
+                          self.n_modes, self.n_ancilla_modes, self.device)
 
     def mutate(self, mutation_probability, max_mutation, n_mutated, population):
         """Mutate the given number of individuals from population."""

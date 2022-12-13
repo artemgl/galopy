@@ -1,7 +1,9 @@
 import torch
-from math import pi
+from math import pi, factorial
 from galopy.data_processing import print_circuit, write_circuits, read_circuits
 from time import time
+from itertools import product
+
 
 # Multiply to get angle in radians from int
 # TODO: move it out of here
@@ -81,6 +83,61 @@ class CircuitSearch:
         self._start_idx_modes = 3 * self.depth
         self._start_idx_ancilla_state_in = 5 * self.depth
         self._start_idx_ancilla_state_out = 5 * self.depth + self.n_ancilla_photons
+
+        self._precompute_matrices()
+
+    def _precompute_matrices(self):
+        self._construct_permutation_matrix()
+        self._construct_normalization_matrix(self._permutation_matrix)
+
+    def _construct_permutation_matrix(self):
+        """
+        The matrix for output state computing.
+        Multiply by it state vector to sum up all like terms.
+        For example, vector (a0 * a1 + a1 * a0) will become 2 * a0 * a1
+        """
+        # TODO: возможно через reshape без to_idx ?
+        def to_idx(*modes):
+            """Convert multi-dimensional index to one-dimensional."""
+            res = 0
+            for mode in modes:
+                res = res * self.n_modes + mode
+            return res
+
+        args = [list(range(self.n_modes))] * self.n_photons
+        indices = [list(i) for i in product(*args)]
+
+        normalized_indices = [idx.copy() for idx in indices]
+        for idx in normalized_indices:
+            idx.sort()
+
+        all_indices = list(map(lambda x, y: [to_idx(*x), to_idx(*y)], normalized_indices, indices))
+        vals = [1.] * len(all_indices)
+
+        self._permutation_matrix = torch.sparse_coo_tensor(torch.tensor(all_indices).t(), vals, device=self.device,
+                                                           dtype=torch.complex64)
+
+    def _construct_normalization_matrix(self, permutation_matrix):
+        """
+        Get matrices for transforming between two representations of state: Dirac form and operator form.
+        It's considered that operator acts on the vacuum state.
+
+            First matrix:  Dirac    -> operator ( |n> -> a^n / sqrt(n!) )
+
+            Second matrix: operator -> Dirac    ( a^n -> sqrt(n!) * |n> )
+        """
+        vector = torch.ones(permutation_matrix.shape[1], 1, device=self.device, dtype=torch.complex64)
+        vector = torch.sparse.mm(permutation_matrix, vector).to_sparse_coo()
+
+        indices = vector.indices()[0].reshape(1, -1)
+        indices = torch.cat((indices, indices))
+        c = factorial(self.n_photons)
+
+        self._normalization_matrix = torch.sparse_coo_tensor(indices, (vector.values() / c).sqrt(),
+                                                             size=permutation_matrix.shape, device=self.device)
+        self._inverted_normalization_matrix = torch.sparse_coo_tensor(indices, (c / vector.values()).sqrt(),
+                                                                      size=permutation_matrix.shape,
+                                                                      device=self.device)
 
     def __calculate_fidelity_and_probability(self, transforms):
         """Given transforms, get fidelity and probability for each one."""

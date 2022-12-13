@@ -24,8 +24,15 @@ if __name__ == "__main__":
     # pop.to_file("frog.json")
     # pop.print()
 
-    pop = from_file("frog.json", None, None, None)
-    pop.print()
+    # pop = from_file("frog.json", None, None, None)
+    # pop.print()
+
+    n_offsprings = 3
+    depth = 5
+    separators = torch.randint(0, depth, size=(n_offsprings, 1))
+    mask = torch.zeros(n_offsprings, depth, dtype=torch.bool)
+    mask.scatter_(dim=1, index=separators, value=True)
+    mask = torch.cumsum(mask, dim=1)
 
     # t, _ = topology.sort()
     # print(t)
