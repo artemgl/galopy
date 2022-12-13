@@ -1,9 +1,9 @@
 import torch
 from math import pi, factorial
-from galopy.data_processing import print_circuit, write_circuits, read_circuits
 from time import time
 from itertools import product
 from galopy.population import random, from_file
+from galopy.progress_bar import print_progress_bar, reprint_progress_bar
 
 
 # Multiply to get angle in radians from int
@@ -184,8 +184,8 @@ class CircuitSearch:
         fidelities, probabilities = self.__get_fidelity_and_probability(population)
         return torch.where(fidelities > 0.999, 100. * probabilities, fidelities)
 
-    def run(self, min_probability, n_generations, n_population, n_offsprings, n_elite,
-            source_file=None, result_file=None):
+    def run(self, min_probability, n_generations, n_offsprings, n_elite,
+            source_file=None, result_file=None, ptype='universal'):
         """
         Launch search. The algorithm stops in one of these cases:
             * After `n_generations` generations
@@ -196,8 +196,6 @@ class CircuitSearch:
 
             n_generations: Maximum number of generations to happen.
 
-            n_population: Number of individuals at each generation.
-
             n_offsprings: Number of offsprings at each generation.
 
             n_elite: Number of individuals with the best fitness, that are guaranteed to pass into the next
@@ -206,10 +204,10 @@ class CircuitSearch:
             source_file: The file to read initial population. If is None, then random population is generated.
 
             result_file: The file to write the result population to. If is None, the data won't be written anywhere.
-        """
-        if n_elite > n_population:
-            raise Exception("Number of elite can't be bigger than {threshold}.".format(threshold=n_population))
 
+            ptype: Population type (universal or real).
+        """
+        n_population = n_elite + n_offsprings
         # Save start time
         start_time = time()
 
@@ -219,18 +217,19 @@ class CircuitSearch:
                                 self._normalization_matrix, self._inverted_normalization_matrix,
                                 n_individuals=n_population, depth=self.depth, n_modes=self.n_modes,
                                 n_ancilla_modes=self.n_ancilla_modes, n_ancilla_photons=self.n_ancilla_photons,
-                                n_success_measurements=self.n_success_measurements, device=self.device)
+                                n_success_measurements=self.n_success_measurements, device=self.device, ptype=ptype)
         else:
             circuits = from_file(source_file,
                                  self._permutation_matrix,
-                                 self._normalization_matrix, self._inverted_normalization_matrix, device=self.device)
+                                 self._normalization_matrix, self._inverted_normalization_matrix, device=self.device,
+                                 ptype=ptype)
             n_circuits = circuits.n_individuals
             if n_circuits < n_population:
                 population = random(self._permutation_matrix,
                                     self._normalization_matrix, self._inverted_normalization_matrix,
                                     n_individuals=n_population - n_circuits, depth=self.depth, n_modes=self.n_modes,
                                     n_ancilla_modes=self.n_ancilla_modes, n_ancilla_photons=self.n_ancilla_photons,
-                                    n_success_measurements=self.n_success_measurements, device=self.device)
+                                    n_success_measurements=self.n_success_measurements, device=self.device, ptype=ptype)
                 population = circuits + population
             else:
                 population = circuits
@@ -238,25 +237,36 @@ class CircuitSearch:
         # Calculate fitness for the initial population
         fitness = self.__calculate_fitness(population)
 
+        print_progress_bar(None, length=40, percentage=0.)
+
         for i in range(n_generations):
             # Select parents
             parents, fitness = population.select(fitness, n_elite)
 
             # Create new generation
-            population = parents + parents.crossover(n_offsprings)
-            population.mutate(mutation_probability=0.5)
+            # parents.mutate(0.5)
+            # population = parents
+
+            children = parents.crossover(n_offsprings)
+            children.mutate(mutation_probability=0.1)
+            population = parents + children
+
+            # population = parents + parents.crossover(n_offsprings)
+            # population.mutate(mutation_probability=0.5)
 
             # Calculate fitness for the new individuals
             fitness = self.__calculate_fitness(population)
 
-            print("Generation:", i + 1)
+            # print("Generation:", i + 1)
             best_fitness = fitness.max().item()
-            print("Best fitness:", best_fitness)
+            # print("Best fitness:", best_fitness)
+            reprint_progress_bar(best_fitness, length=40, percentage=(i + 1.) / n_generations)
 
             # If circuit with high enough fitness is found, stop
             if best_fitness >= 100. * min_probability:
                 n_generations = i + 1
                 break
+        print()
 
         # Save result population to file
         if result_file is not None:
@@ -267,7 +277,7 @@ class CircuitSearch:
 
         # Print result info
         print("Circuit:")
-        best.print_best(fitness)
+        best.print(0)
         f, p = self.__get_fidelity_and_probability(best)
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())

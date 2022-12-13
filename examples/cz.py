@@ -6,9 +6,9 @@ if __name__ == "__main__":
     min_probability = 1. / 9.
     n_population = 2000
     n_offsprings = 400
-    n_mutated = 2000
+    # n_mutated = 2000
     n_elite = 800
-    n_generations = 200
+    n_generations = 300
 
     # Gate represented as a matrix
     matrix = np.array([[1., 0., 0., 0.],
@@ -28,4 +28,4 @@ if __name__ == "__main__":
     search = CircuitSearch('cuda', matrix, input_basic_states=basic_states, depth=3,
                            n_ancilla_modes=2, n_ancilla_photons=0)
     # Launch the search!
-    search.run(min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite)
+    search.run(min_probability, n_generations, n_offsprings, n_elite, ptype='real')

@@ -7,7 +7,6 @@ if __name__ == "__main__":
     min_probability = 1.0
     n_population = 800
     n_offsprings = 200
-    n_mutated = 800
     n_elite = 100
     n_generations = 1000
 
@@ -26,4 +25,4 @@ if __name__ == "__main__":
     search = CircuitSearch('cuda', matrix, input_basic_states=basic_states, depth=3,
                            n_ancilla_modes=0, n_ancilla_photons=0)
     # Launch the search!
-    search.run(min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite)
+    search.run(min_probability, n_generations, n_population, n_offsprings, n_elite)
