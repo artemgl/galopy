@@ -1,6 +1,6 @@
 import torch
 import pandas as pd
-from math import tau
+from math import tau, pi
 import json
 
 
@@ -71,15 +71,33 @@ class Population:
 
         self._precompute_extra()
 
-    def print(self, i=None):
-        if i is None:
-            print(self._bs_angles)
-            print(self._ps_angles)
-            print(self._topologies)
-            print(self._initial_ancilla_states)
-            print(self._measurements)
+    def print_best(self, fitness):
+        _, i = torch.topk(fitness, 1)
+
+        bs_angles = self._bs_angles[i].view(-1, 2).cpu().numpy().tolist()
+        bs_angles = [str(sublist[0]) + str(sublist[1]) for sublist in bs_angles]
+        ps_angles = self._ps_angles[i].view(-1).cpu().numpy()
+        angles = bs_angles + ps_angles
+
+        topology = self._topologies[i].cpu().numpy().tolist()
+        topology = [str(sublist[0]) + str(sublist[1]) for sublist in topology]
+
+        elements = pd.DataFrame({'Element': ['Beam splitter'] * self.depth + ['Phase shifter'] * self.n_work_modes,
+                                 'Angles': angles,
+                                 'Modes': topology})
+
+        if self.n_ancilla_photons > 0:
+            modes_in = self._initial_ancilla_states[i].view(-1).cpu().numpy()
+            # TODO: print all the measurements
+            modes_out = self._measurements[i][0].cpu().numpy()
+
+            ancillas = pd.DataFrame({'Mode in': modes_in,
+                                     'Mode out': modes_out})
+            ancillas.index.name = 'Ancilla photon'
+
+            print(elements, ancillas, sep='\n')
         else:
-            pass
+            print(elements)
 
     def to_file(self, file_name):
         """Write data to file."""
@@ -307,21 +325,54 @@ class Population:
                           bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
                           self.n_modes, self.n_ancilla_modes, self.device)
 
-    def mutate(self, mutation_probability, max_mutation, n_mutated, population):
-        """Mutate the given number of individuals from population."""
-        perm = torch.randperm(population.shape[0], device=self.device)[:n_mutated]
-        sub_population = population[perm]
+    def mutate(self, mutation_probability):
+        """Mutate individuals."""
+        mask = torch.rand_like(self._bs_angles, device=self.device) < mutation_probability
+        deltas = torch.rand(size=(mask.sum().item(),), device=self.device) * tau - pi
+        self._bs_angles[mask] += deltas
 
-        mask = torch.rand(size=sub_population.shape, dtype=torch.float, device=self.device) < mutation_probability
-        deltas = torch.randint(-max_mutation, max_mutation, size=(mask.sum().item(),), device=self.device)
-        mutated = sub_population.clone()
-        mutated[mask] += deltas
-        return self.__normalize_coeffs(mutated)
+        mask = torch.rand_like(self._ps_angles, device=self.device) < mutation_probability
+        deltas = torch.rand(size=(mask.sum().item(),), device=self.device) * tau - pi
+        self._ps_angles[mask] += deltas
 
-    def select(self, population, fitness, n_to_select):
+        mask = torch.rand_like(self._topologies, device=self.device) < mutation_probability
+        deltas = torch.randint(0, self.n_work_modes, size=(mask.sum().item(),), device=self.device)
+        self._topologies[mask] += deltas
+
+        mask = torch.rand_like(self._initial_ancilla_states, device=self.device) < mutation_probability
+        deltas = torch.randint(0, self.n_ancilla_modes, size=(mask.sum().item(),), device=self.device)
+        self._initial_ancilla_states[mask] += deltas
+
+        mask = torch.rand_like(self._measurements, device=self.device) < mutation_probability
+        deltas = torch.randint(0, self.n_ancilla_modes, size=(mask.sum().item(),), device=self.device)
+        self._measurements[mask] += deltas
+
+        self._normalize_data()
+
+    def select(self, fitness, n_to_select):
         """
         Select the given number of individuals from population.
         The choice is based on the fitness.
         """
         fitness, indices = torch.topk(fitness, n_to_select)
-        return population[indices, ...], fitness
+
+        bs_angles = self._bs_angles[indices, ...]
+        ps_angles = self._ps_angles[indices, ...]
+        topologies = self._topologies[indices, ...]
+        initial_ancilla_states = self._initial_ancilla_states[indices, ...]
+        measurements = self._measurements[indices, ...]
+
+        return Population(self._permutation_matrix, self._normalization_matrix, self._inverted_normalization_matrix,
+                          bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
+                          self.n_modes, self.n_ancilla_modes, self.device), fitness
+
+    def __add__(self, other):
+        bs_angles = torch.cat((self._bs_angles, other._bs_angles), 0)
+        ps_angles = torch.cat((self._ps_angles, other._ps_angles), 0)
+        topologies = torch.cat((self._topologies, other._topologies), 0)
+        initial_ancilla_states = torch.cat((self._initial_ancilla_states, other._initial_ancilla_states), 0)
+        measurements = torch.cat((self._measurements, other._measurements), 0)
+
+        return Population(self._permutation_matrix, self._normalization_matrix, self._inverted_normalization_matrix,
+                          bs_angles, ps_angles, topologies, initial_ancilla_states, measurements,
+                          self.n_modes, self.n_ancilla_modes, self.device)

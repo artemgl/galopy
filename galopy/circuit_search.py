@@ -3,6 +3,7 @@ from math import pi, factorial
 from galopy.data_processing import print_circuit, write_circuits, read_circuits
 from time import time
 from itertools import product
+from galopy.population import random, from_file
 
 
 # Multiply to get angle in radians from int
@@ -183,12 +184,12 @@ class CircuitSearch:
         fidelities, probabilities = self.__get_fidelity_and_probability(population)
         return torch.where(fidelities > 0.999, 100. * probabilities, fidelities)
 
-    def run(self, min_probability, n_generations, n_population, n_offsprings, n_mutated, n_elite,
+    def run(self, min_probability, n_generations, n_population, n_offsprings, n_elite,
             source_file=None, result_file=None):
         """
         Launch search. The algorithm stops in one of these cases:
-            * After n_generations generations
-            * If the circuit with fidelity > 0.999 and probability > min_probability is found
+            * After `n_generations` generations
+            * If the circuit with fidelity > 0.999 and probability > `min_probability` is found
 
         Parameters:
             min_probability: Minimum required probability of the gate.
@@ -198,9 +199,6 @@ class CircuitSearch:
             n_population: Number of individuals at each generation.
 
             n_offsprings: Number of offsprings at each generation.
-
-            n_mutated: Number of mutated individuals at each generation. Mutation happens on random individuals,
-            approximately half of genes are mutated.
 
             n_elite: Number of individuals with the best fitness, that are guaranteed to pass into the next
             generation.
@@ -217,14 +215,23 @@ class CircuitSearch:
 
         # Get initial population
         if source_file is None:
-            population = self.__gen_random_population(n_population)
+            population = random(self._permutation_matrix,
+                                self._normalization_matrix, self._inverted_normalization_matrix,
+                                n_individuals=n_population, depth=self.depth, n_modes=self.n_modes,
+                                n_ancilla_modes=self.n_ancilla_modes, n_ancilla_photons=self.n_ancilla_photons,
+                                n_success_measurements=self.n_success_measurements, device=self.device)
         else:
-            circuits = read_circuits(source_file)
-            n_circuits = circuits.shape[0]
-            circuits = torch.tensor(circuits, device=self.device)
+            circuits = from_file(source_file,
+                                 self._permutation_matrix,
+                                 self._normalization_matrix, self._inverted_normalization_matrix, device=self.device)
+            n_circuits = circuits.n_individuals
             if n_circuits < n_population:
-                population = self.__gen_random_population(n_population - n_circuits)
-                population = torch.cat((circuits, population), 0)
+                population = random(self._permutation_matrix,
+                                    self._normalization_matrix, self._inverted_normalization_matrix,
+                                    n_individuals=n_population - n_circuits, depth=self.depth, n_modes=self.n_modes,
+                                    n_ancilla_modes=self.n_ancilla_modes, n_ancilla_photons=self.n_ancilla_photons,
+                                    n_success_measurements=self.n_success_measurements, device=self.device)
+                population = circuits + population
             else:
                 population = circuits
 
@@ -232,46 +239,36 @@ class CircuitSearch:
         fitness = self.__calculate_fitness(population)
 
         for i in range(n_generations):
+            # Select parents
+            parents, fitness = population.select(fitness, n_elite)
+
             # Create new generation
-            children = self.__crossover(n_offsprings, population)
-            mutated = self.__mutate(0.5, 50, n_mutated, population)
-            new_individuals = torch.cat((children, mutated), 0)
+            population = parents + parents.crossover(n_offsprings)
+            population.mutate(mutation_probability=0.5)
 
             # Calculate fitness for the new individuals
-            new_fitness = self.__calculate_fitness(new_individuals)
-
-            # Select individuals
-            new_individuals, new_fitness = self.__select(new_individuals, new_fitness, n_population - n_elite)
-
-            # Get best from current population
-            elite_fitness, elite_indices = torch.topk(fitness, n_elite)
-            elite = population[elite_indices, ...]
-
-            # New generation
-            fitness = torch.cat((elite_fitness, new_fitness), 0)
-            population = torch.cat((elite, new_individuals), 0)
+            fitness = self.__calculate_fitness(population)
 
             print("Generation:", i + 1)
             best_fitness = fitness.max().item()
             print("Best fitness:", best_fitness)
 
             # If circuit with high enough fitness is found, stop
-            if best_fitness >= 1000. * min_probability:
+            if best_fitness >= 100. * min_probability:
                 n_generations = i + 1
                 break
 
-        # Sort result population
-        fitness, indices = torch.sort(fitness, descending=True)
-        population = population[indices, ...]
-
         # Save result population to file
         if result_file is not None:
-            write_circuits(result_file, population.cpu().numpy())
+            population.to_file(result_file)
+
+        # Get the best circuit
+        best, fitness = population.select(fitness, 1)
 
         # Print result info
         print("Circuit:")
-        print_circuit(population[0], self.depth, self.n_ancilla_photons)
-        f, p = self.__get_fidelity_and_probability(population[0].reshape(1, -1))
+        best.print_best(fitness)
+        f, p = self.__get_fidelity_and_probability(best)
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())
         print(f"Processed {n_generations} generations in {time() - start_time:.2f} seconds")
