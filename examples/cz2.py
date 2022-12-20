@@ -4,7 +4,6 @@ from galopy.circuit_search import *
 if __name__ == "__main__":
     # Initialize parameters
     min_probability = 1. / 16.
-    n_population = 1000
     n_offsprings = 600
     n_elite = 400
     n_generations = 100
@@ -44,4 +43,4 @@ if __name__ == "__main__":
                            output_basic_states=output_basic_states, depth=8,
                            n_ancilla_modes=4, n_ancilla_photons=2)
     # Launch the search!
-    search.run(min_probability, n_generations, n_population, n_offsprings, n_elite)
+    search.run(min_probability, n_generations, n_offsprings, n_elite, ptype='real')
