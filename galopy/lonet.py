@@ -145,16 +145,27 @@ class LoNet(torch.nn.Module):
         transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
 
         for i in range(self.n_modes - 1):
-            for j in range(i + 1):
+            for j in range(i + 1, self.n_modes):
                 local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-                local_transform[i - j, i - j] = cos_s[i * (i + 1) // 2 + j]
-                local_transform[i - j + 1, i - j] = \
-                    -exp_beta_s[i * (i + 1) // 2 + j] * sin_s[i * (i + 1) // 2 + j]
-                local_transform[i - j, i - j + 1] = \
-                    exp_beta_s[i * (i + 1) // 2 + j].conj() * sin_s[i * (i + 1) // 2 + j]
-                local_transform[i - j + 1, i - j + 1] = cos_s[i * (i + 1) // 2 + j]
+                local_transform[i, i] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+                local_transform[j, i] = \
+                    -exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1] * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+                local_transform[i, j] = \
+                    exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1].conj() * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+                local_transform[j, j] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
 
                 transform = local_transform.matmul(transform)
+        # for i in range(self.n_modes - 1):
+        #     for j in range(i + 1):
+        #         local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
+        #         local_transform[i - j, i - j] = cos_s[i * (i + 1) // 2 + j]
+        #         local_transform[i - j + 1, i - j] = \
+        #             -exp_beta_s[i * (i + 1) // 2 + j] * sin_s[i * (i + 1) // 2 + j]
+        #         local_transform[i - j, i - j + 1] = \
+        #             exp_beta_s[i * (i + 1) // 2 + j].conj() * sin_s[i * (i + 1) // 2 + j]
+        #         local_transform[i - j + 1, i - j + 1] = cos_s[i * (i + 1) // 2 + j]
+        #
+        #         transform = local_transform.matmul(transform)
 
         transform = torch.diag(exp_gamma_s).matmul(transform)
 
@@ -295,6 +306,7 @@ class LoNet(torch.nn.Module):
         # return (f - torch.abs(f - p / p_min)).max()
         # return (f * p).max()
         # return torch.where(p < p_min, f, -p).max()
-        return (-p).max()
-        # return f.max()
+        # return (-p).max()
+        return f.max()
+        # return p.max()
         # return torch.where(p < 1. / 9., p, f).max()
