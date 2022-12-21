@@ -146,8 +146,8 @@ class RealPopulation:
         # Write unitary coefficients for each beam splitter
         unitaries_coeffs = torch.zeros(self.n_individuals, depth, 4, device=self.device, dtype=torch.complex64)
         unitaries_coeffs[:, :, 0] = torch.cos(thetas)
-        unitaries_coeffs[:, :, 1] = -torch.sin(thetas)
-        unitaries_coeffs[:, :, 2] = torch.sin(thetas)
+        unitaries_coeffs[:, :, 1] = torch.sin(thetas)
+        unitaries_coeffs[:, :, 2] = -torch.sin(thetas)
         unitaries_coeffs[:, :, 3] = torch.cos(thetas)
 
         # Create an unitary for each beam splitter
@@ -439,8 +439,8 @@ class Population(RealPopulation):
         # Write unitary coefficients for each beam splitter
         unitaries_coeffs = torch.zeros(self.n_individuals, depth, 4, device=self.device, dtype=torch.complex64)
         unitaries_coeffs[:, :, 0] = torch.cos(thetas)
-        unitaries_coeffs[:, :, 1] = -torch.exp(1.j * phis) * torch.sin(thetas)
-        unitaries_coeffs[:, :, 2] = torch.exp(-1.j * phis) * torch.sin(thetas)
+        unitaries_coeffs[:, :, 1] = torch.exp(-1.j * phis) * torch.sin(thetas)
+        unitaries_coeffs[:, :, 2] = -torch.exp(1.j * phis) * torch.sin(thetas)
         unitaries_coeffs[:, :, 3] = torch.cos(thetas)
 
         # Create an unitary for each beam splitter
