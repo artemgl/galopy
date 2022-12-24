@@ -56,26 +56,62 @@ def loss(pred, target):
     return 1. - res
 
 
+def print_parallel_topology(n_modes):
+    blocks = [n_modes]
+    for i in range(ceil(log(n_modes, 2))):
+        # Слой
+        blocks = [x for sublist in [[b // 2, b - (b // 2)] for b in blocks] for x in sublist]
+
+        # Индекс, с которого начинаются преобразования в общей матрице
+        start = 0
+        for j in range(len(blocks) // 2):
+            # Параллельный блок в слое
+
+            # Количество мод в левой половине
+            left = blocks[2 * j]
+            # Количество мод в правой половине
+            right = blocks[2 * j + 1]
+            for k in range(right):
+                # Параллельный шаг в блоке
+                for m in range(left):
+                    # Конкретная мода в левой половине
+                    x = start + m
+                    y = start + left + (m + k) % right
+                    print(x, y)
+            start += left + right
+        print("End of layer")
+
+
 if __name__ == '__main__':
 
     device = 'cuda:0'
     # device = 'cpu'
-    epochs = 1000
+    epochs = 500
 
-    # target_matrix = np.array([[1., 0., 0., 0.],
-    #                           [0., 1., 0., 0.],
-    #                           [0., 0., 1., 0.],
-    #                           [0., 0., 0., -1.]])
     target_matrix = np.array([[1., 0., 0., 0.],
                               [0., 1., 0., 0.],
                               [0., 0., 1., 0.],
-                              [0., 0., 0., -1.],
-                              [0., 0., 0., 0.],
-                              [0., 0., 0., 0.],
-                              [0., 0., 0., 0.],
-                              [0., 0., 0., 0.],
-                              [0., 0., 0., 0.],
-                              [0., 0., 0., 0.]])
+                              [0., 0., 0., -1.]])
+    # target_matrix = np.array([[1., 0., 0., 0.],
+    #                           [0., 1., 0., 0.],
+    #                           [0., 0., 1., 0.],
+    #                           [0., 0., 0., -1.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.]])
+    # target_matrix = np.array([[1., 0., 0., 0.],
+    #                           [0., 1., 0., 0.],
+    #                           [0., 0., 1., 0.],
+    #                           [0., 0., 0., (1. + 1.j) / sqrt(2.)],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.],
+    #                           [0., 0., 0., 0.]])
 
     # a = 1. / sqrt(3.)
     # b = sqrt(2. / 3.)
@@ -136,12 +172,17 @@ if __name__ == '__main__':
 
     plt.figure(figsize=(12, 7))
 
-    measurements = np.array([[1, 3]])
-    ancilla_state = np.array([1, 3])
-    net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=4,
-                measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
-    # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2)
+    # measurements = np.array([[1, 3]])
+    # ancilla_state = np.array([1, 3])
+    # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2,
+    #             measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
+    # measurements = np.array([[1, 3]])
+    # ancilla_state = np.array([1, 3])
+    # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=4,
+    #             measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
+    net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2)
     # net = LoNet(target_matrix, input_basic_states, device=device)
+    print_parallel_topology(net.n_modes)
 
     # net_copy = copy.deepcopy(net)
     # net_copy.to(device)

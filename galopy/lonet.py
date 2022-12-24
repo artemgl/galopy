@@ -1,6 +1,6 @@
 import torch
 from itertools import product
-from math import factorial
+from math import factorial, log, ceil
 
 
 class LoNet(torch.nn.Module):
@@ -144,17 +144,48 @@ class LoNet(torch.nn.Module):
 
         transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
 
-        for i in range(self.n_modes - 1):
-            for j in range(i + 1, self.n_modes):
-                local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-                local_transform[i, i] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-                local_transform[j, i] = \
-                    -exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1] * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-                local_transform[i, j] = \
-                    exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1].conj() * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-                local_transform[j, j] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+        counter = 0
+        blocks = [self.n_modes]
+        for i in range(ceil(log(self.n_modes, 2))):
+            # Слой
+            blocks = [x for sublist in [[b // 2, b - (b // 2)] for b in blocks] for x in sublist]
+            layer_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
 
-                transform = local_transform.matmul(transform)
+            # Индекс, с которого начинаются преобразования в общей матрице
+            start = 0
+            for j in range(len(blocks) // 2):
+                # Параллельный блок в слое
+                # Количество мод в левой половине
+                left = blocks[2 * j]
+                # Количество мод в правой половине
+                right = blocks[2 * j + 1]
+                for k in range(right):
+                    # Параллельный шаг в блоке
+                    for m in range(left):
+                        # Конкретная мода в левой половине
+                        block_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
+                        x = start + m
+                        y = start + left + (m + k) % right
+                        block_transform[x, x] = cos_s[counter]
+                        block_transform[y, x] = -exp_beta_s[counter] * sin_s[counter]
+                        block_transform[x, y] = exp_beta_s[counter].conj() * sin_s[counter]
+                        block_transform[y, y] = cos_s[counter]
+                        counter += 1
+                        layer_transform = block_transform.matmul(layer_transform)
+
+                start += left + right
+            transform = transform.matmul(layer_transform)
+        # for i in range(self.n_modes - 1):
+        #     for j in range(i + 1, self.n_modes):
+        #         local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
+        #         local_transform[i, i] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+        #         local_transform[j, i] = \
+        #             -exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1] * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+        #         local_transform[i, j] = \
+        #             exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1].conj() * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+        #         local_transform[j, j] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
+        #
+        #         transform = local_transform.matmul(transform)
         # for i in range(self.n_modes - 1):
         #     for j in range(i + 1):
         #         local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
@@ -299,7 +330,8 @@ class LoNet(torch.nn.Module):
         return f.max()
 
     def loss2(self, f, p):
-        p_min = 1. / 16.
+        p_min = 0.074
+        # p_min = 1. / 16.
         # p_min = 1. / 9.
 
         return ((f - p) * (1. + torch.sign(p - p_min)) + 2. * p).max()
