@@ -1,11 +1,13 @@
 import torch
 from itertools import product
-from math import factorial, log, ceil
+from math import factorial, pi
+import galopy.topology as tl
+import json
 
 
 class LoNet(torch.nn.Module):
     def __init__(self, matrix, input_basic_states, output_basic_states=None, n_ancilla_modes=0, ancilla_state=None,
-                 measurements=None, device='cpu'):
+                 measurements=None, device='cpu', topology=None):
         super().__init__()
 
         self.device = device
@@ -58,10 +60,13 @@ class LoNet(torch.nn.Module):
         # Total number of photons
         self.n_photons = self.n_state_photons + self.n_ancilla_photons
 
-        i = self.n_modes * (self.n_modes - 1) // 2
-        self.alphas = torch.nn.Linear(i, 1, bias=False, device=device)
-        self.betas = torch.nn.Linear(i, 1, bias=False, device=device)
-        self.gammas = torch.nn.Linear(self.n_modes, 1, bias=False, device=device)
+        if topology is None:
+            self.topology = tl.Parallel(self.n_modes)
+        else:
+            self.topology = topology
+
+        self.bs_angles = torch.nn.Linear(self.n_modes * (self.n_modes - 1), 1, bias=False, device=device)
+        self.ps_angles = torch.nn.Linear(self.n_modes, 1, bias=False, device=device)
 
         self.__precompute()
 
@@ -132,75 +137,8 @@ class LoNet(torch.nn.Module):
 
         return norm_mtx, inv_norm_mtx
 
-    # TODO: optimize
     def __construct_unitary(self):
-        sin_s = torch.sin(self.alphas.weight).reshape(-1)
-        cos_s = torch.cos(self.alphas.weight).reshape(-1)
-        exp_beta_s = torch.exp(1.j * self.betas.weight).reshape(-1)
-        # TODO: optimize!
-        exp_gamma_s = torch.exp(1.j * self.gammas.weight[:, :-1]).reshape(-1)
-        first_gamma = torch.tensor([1.], dtype=torch.complex64, device=self.device)
-        exp_gamma_s = torch.cat((exp_gamma_s, first_gamma), 0)
-
-        transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-
-        counter = 0
-        blocks = [self.n_modes]
-        for i in range(ceil(log(self.n_modes, 2))):
-            # Слой
-            blocks = [x for sublist in [[b // 2, b - (b // 2)] for b in blocks] for x in sublist]
-            layer_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-
-            # Индекс, с которого начинаются преобразования в общей матрице
-            start = 0
-            for j in range(len(blocks) // 2):
-                # Параллельный блок в слое
-                # Количество мод в левой половине
-                left = blocks[2 * j]
-                # Количество мод в правой половине
-                right = blocks[2 * j + 1]
-                for k in range(right):
-                    # Параллельный шаг в блоке
-                    for m in range(left):
-                        # Конкретная мода в левой половине
-                        block_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-                        x = start + m
-                        y = start + left + (m + k) % right
-                        block_transform[x, x] = cos_s[counter]
-                        block_transform[y, x] = -exp_beta_s[counter] * sin_s[counter]
-                        block_transform[x, y] = exp_beta_s[counter].conj() * sin_s[counter]
-                        block_transform[y, y] = cos_s[counter]
-                        counter += 1
-                        layer_transform = block_transform.matmul(layer_transform)
-
-                start += left + right
-            transform = transform.matmul(layer_transform)
-        # for i in range(self.n_modes - 1):
-        #     for j in range(i + 1, self.n_modes):
-        #         local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-        #         local_transform[i, i] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-        #         local_transform[j, i] = \
-        #             -exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1] * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-        #         local_transform[i, j] = \
-        #             exp_beta_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1].conj() * sin_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-        #         local_transform[j, j] = cos_s[i * (2 * self.n_modes - 3 - i) // 2 + j - 1]
-        #
-        #         transform = local_transform.matmul(transform)
-        # for i in range(self.n_modes - 1):
-        #     for j in range(i + 1):
-        #         local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
-        #         local_transform[i - j, i - j] = cos_s[i * (i + 1) // 2 + j]
-        #         local_transform[i - j + 1, i - j] = \
-        #             -exp_beta_s[i * (i + 1) // 2 + j] * sin_s[i * (i + 1) // 2 + j]
-        #         local_transform[i - j, i - j + 1] = \
-        #             exp_beta_s[i * (i + 1) // 2 + j].conj() * sin_s[i * (i + 1) // 2 + j]
-        #         local_transform[i - j + 1, i - j + 1] = cos_s[i * (i + 1) // 2 + j]
-        #
-        #         transform = local_transform.matmul(transform)
-
-        transform = torch.diag(exp_gamma_s).matmul(transform)
-
-        return transform
+        return self.topology.gen_unitary(self.bs_angles.weight.view(-1, 2), self.ps_angles.weight.view(-1))
 
     def __construct_state(self):
         """Create the initial state in Dirac form."""
@@ -325,6 +263,160 @@ class LoNet(torch.nn.Module):
 
     def forward(self):
         return self.__get_fidelity_and_probability()
+
+    def to_loqc_tech(self, filename):
+        photon_sources = []
+        for i in range(self.n_modes):
+            source = {
+                "id": "in" + str(self.n_modes - 1 - i),
+                "type": "IN",
+                "theta": "undefined",
+                "phi": "undefined",
+                "n": "-",
+                "input_type": "0",
+                "x": 50,
+                "y": 50 + 85 * i
+            }
+            photon_sources.append(source)
+        for source in photon_sources[:2]:
+            source["input_type"] = "2"
+        for source in photon_sources[self.n_state_modes:self.n_modes]:
+            source["input_type"] = "1"
+
+        connections = []
+        n_connection = 0
+        frontier = [("in" + str(i), "hybrid0") for i in range(self.n_modes)]
+
+        bs_angles = self.bs_angles.weight.data.view(-1, 2).cpu().numpy()
+
+        counter = 0
+        beam_splitters = []
+        for i, j in self.topology.modes:
+            if abs(bs_angles[counter][0]) < 0.0001:
+                counter += 1
+                continue
+
+            id = "bs" + str(i) + str(j)
+            beam_splitter = {
+                "id": id,
+                "type": "BS",
+                # "theta": f"{180. * bs_angles[counter][0] / pi:.6f}",
+                # "phi": f"{180. * bs_angles[counter][1] / pi:.6f}",
+                "theta": str(180. * bs_angles[counter][0] / pi),
+                "phi": str(180. * bs_angles[counter][1] / pi),
+                # "theta": "45",
+                # "phi": "0",
+                "n": "undefined",
+                "input_type": "undefined",
+                "x": str(int(50 + 1500 * (counter + 1) / len(self.topology.modes))),
+                "y": str(int(40 + 85 * (self.n_modes - 1) - 42.5 * (i + j)))
+            }
+            beam_splitters.append(beam_splitter)
+
+            connection0 = {
+                "id": "c" + str(n_connection),
+                "type": "draw2d.Connection",
+                "router": "draw2d.layout.connection.ManhattanConnectionRouter",
+                "source": {"node": frontier[j][0], "port": frontier[j][1]},
+                "target": {"node": id, "port": "hybrid0"}
+            }
+            n_connection += 1
+            connection1 = {
+                "id": "c" + str(n_connection),
+                "type": "draw2d.Connection",
+                "router": "draw2d.layout.connection.ManhattanConnectionRouter",
+                "source": {"node": frontier[i][0], "port": frontier[i][1]},
+                "target": {"node": id, "port": "hybrid2"}
+            }
+            n_connection += 1
+            connections.append([connection0])
+            connections.append([connection1])
+
+            frontier[i] = id, "hybrid3"
+            frontier[j] = id, "hybrid1"
+
+            counter += 1
+
+        ps_angles = self.ps_angles.weight.data.view(-1).cpu().numpy()
+
+        phase_shifters = []
+        for i in range(self.n_modes):
+            if abs(ps_angles[-1 - i]) < 0.0001:
+                continue
+
+            id = "ps" + str(self.n_modes - 1 - i)
+            phase_shifter = {
+                "id": id,
+                "type": "PS",
+                "theta": "undefined",
+                # "phi": f"{180. * ps_angles[-1 - i] / pi:.6f}",
+                "phi": str(180. * ps_angles[-1 - i] / pi),
+                # "phi": "0",
+                "n": "undefined",
+                "input_type": "undefined",
+                "x": 1650,
+                "y": 50 + 85 * i
+            }
+            phase_shifters.append(phase_shifter)
+
+            connection = {
+                "id": "c" + str(n_connection),
+                "type": "draw2d.Connection",
+                "router": "draw2d.layout.connection.ManhattanConnectionRouter",
+                "source": {"node": frontier[-1 - i][0], "port": frontier[-1 - i][1]},
+                "target": {"node": id, "port": "hybrid0"}
+            }
+            n_connection += 1
+            connections.append([connection])
+
+            frontier[-1 - i] = id, "hybrid1"
+
+        photon_detections = []
+        for i in range(self.n_modes):
+            id = "out" + str(self.n_modes - 1 - i)
+            detection = {
+                "id": id,
+                "type": "OUT",
+                "theta": "undefined",
+                "phi": "undefined",
+                "n": "-",
+                "input_type": "1",
+                "x": 1700,
+                "y": 50 + 85 * i
+            }
+            photon_detections.append(detection)
+
+            connection = {
+                "id": "c" + str(n_connection),
+                "type": "draw2d.Connection",
+                "router": "draw2d.layout.connection.ManhattanConnectionRouter",
+                "source": {"node": frontier[-1 - i][0], "port": frontier[-1 - i][1]},
+                "target": {"node": id, "port": "hybrid0"}
+            }
+            n_connection += 1
+            connections.append([connection])
+
+        ancillas_in = [0] * self.n_ancilla_modes
+        ancilla_state = self.ancilla_state.view(-1).cpu().numpy()
+        for i in ancilla_state:
+            ancillas_in[i] += 1
+        for i in range(self.n_ancilla_modes):
+            photon_sources[self.n_modes - 1 - i]["n"] = ancillas_in[i]
+
+        ancillas_out = [0] * self.n_ancilla_modes
+        measurements = self.measurements.view(-1, self.n_ancilla_photons).cpu().numpy()
+        for i in measurements[0]:
+            ancillas_out[i] += 1
+        for i in range(self.n_ancilla_modes):
+            photon_detections[self.n_modes - 1 - i]["n"] = ancillas_out[i]
+
+        data = {
+            "objects": photon_sources + beam_splitters + phase_shifters + photon_detections,
+            "connections": connections
+        }
+
+        with open(filename, 'w') as f:
+            f.write(json.dumps(data))
 
     def loss(self, f, p):
         return f.max()
