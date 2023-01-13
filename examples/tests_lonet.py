@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     device = 'cuda:0'
     # device = 'cpu'
-    epochs = 1000
+    epochs = 2000
 
     # target_matrix = np.array([[1., 0., 0., 0.],
     #                           [0., 1., 0., 0.],
@@ -171,6 +171,20 @@ if __name__ == '__main__':
     # input_basic_states = np.array([[0], [1], [2], [3], [4], [5]])
     # input_basic_states = np.array([[1], [0]])
 
+    # input_basic_states = np.array([[2, 3],
+    #                                [0, 3],
+    #                                [1, 2],
+    #                                [0, 1]])
+    # output_basic_states = np.array([[2, 3],
+    #                                 [0, 3],
+    #                                 [1, 2],
+    #                                 [0, 1],
+    #                                 [0, 0],
+    #                                 [1, 1],
+    #                                 [2, 2],
+    #                                 [3, 3],
+    #                                 [1, 3],
+    #                                 [0, 2]])
     input_basic_states = np.array([[0, 2],
                                    [0, 3],
                                    [1, 2],
@@ -205,14 +219,14 @@ if __name__ == '__main__':
     # ancilla_state = np.array([1, 3])
     # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2,
     #             measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
-    measurements = np.array([[1, 3]])
-    ancilla_state = np.array([1, 3])
-    # topology = tl.Stable(8)
+    measurements = np.array([[0, 1]])
+    ancilla_state = np.array([1, 1])
+    topology = tl.Stable(6)
+    net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2,
+                measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states,
+                topology=topology)
     # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=4,
-    #             measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states,
-    #             topology=topology)
-    net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=4,
-                measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
+    #             measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
     # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2)
     # net = LoNet(target_matrix, input_basic_states, device=device)
     # print_parallel_topology(net.n_modes)

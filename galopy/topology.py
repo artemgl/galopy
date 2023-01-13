@@ -111,3 +111,34 @@ class Pyramidal(Topology):
             for j in range(i + 1):
                 res.append([i - j, i - j + 1])
         return np.array(res)
+
+
+# class Test(Topology):
+#     def __init__(self, n_modes):
+#         super().__init__(n_modes)
+#
+#     def _gen(self):
+#         res = [[0, 1],
+#                [3, 5],
+#                [1, 3],
+#                [1, 5],
+#                [0, 3],
+#                [0, 5]]
+#         return np.array(res)
+#
+#     def gen_unitary(self, bs_angles, ps_angles):
+#         sin_s = torch.sin(bs_angles[..., 0]).reshape(-1)
+#         cos_s = torch.cos(bs_angles[..., 0]).reshape(-1)
+#         exp_beta_s = torch.exp(1.j * bs_angles[..., 1]).reshape(-1)
+#
+#         transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
+#         counter = 0
+#         for x, y in self.modes:
+#             local_transform = torch.eye(self.n_modes, dtype=torch.complex64, device=self.device)
+#             local_transform[x, x] = cos_s[counter]
+#             local_transform[y, x] = -exp_beta_s[counter] * sin_s[counter]
+#             local_transform[x, y] = exp_beta_s[counter].conj() * sin_s[counter]
+#             local_transform[y, y] = cos_s[counter]
+#             counter += 1
+#             transform = local_transform.matmul(transform)
+#         return transform

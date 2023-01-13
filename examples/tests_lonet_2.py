@@ -33,11 +33,27 @@ def fidelity(pred, target):
 def run_method(net, loss_fn, optimizer, epochs):
     f_history = []
     p_history = []
+    best_circuit = copy.deepcopy(net)
+    best_f, best_p = best_circuit.forward()
+    best_f = best_f.data
+    best_p = best_p.data
 
     for epoch_index in range(epochs):
         optimizer.zero_grad()
 
         f, p = net.forward()
+
+        if abs(f - 1.) < 0.001:
+            if p > best_p:
+                best_circuit = copy.deepcopy(net)
+                best_f = f
+                best_p = p
+        else:
+            if f > best_f:
+                best_circuit = copy.deepcopy(net)
+                best_f = f
+                best_p = p
+
         loss_value = loss_fn(f, p)
         # fn_history.append(loss_value.data)
         f_history.append(f[0].item())
@@ -45,7 +61,7 @@ def run_method(net, loss_fn, optimizer, epochs):
         loss_value.backward()
         optimizer.step()
 
-    return f_history, p_history
+    return best_circuit, f_history, p_history
 
 
 def loss(pred, target):
@@ -56,37 +72,11 @@ def loss(pred, target):
     return 1. - res
 
 
-def print_parallel_topology(n_modes):
-    blocks = [n_modes]
-    for i in range(ceil(log(n_modes, 2))):
-        # Слой
-        blocks = [x for sublist in [[b // 2, b - (b // 2)] for b in blocks] for x in sublist]
-
-        # Индекс, с которого начинаются преобразования в общей матрице
-        start = 0
-        for j in range(len(blocks) // 2):
-            # Параллельный блок в слое
-
-            # Количество мод в левой половине
-            left = blocks[2 * j]
-            # Количество мод в правой половине
-            right = blocks[2 * j + 1]
-            for k in range(right):
-                # Параллельный шаг в блоке
-                for m in range(left):
-                    # Конкретная мода в левой половине
-                    x = start + m
-                    y = start + left + (m + k) % right
-                    print(x, y)
-            start += left + right
-        print("End of layer")
-
-
 if __name__ == '__main__':
 
     device = 'cuda:0'
     # device = 'cpu'
-    epochs = 2000
+    epochs = 1000
 
     target_matrix = np.array([[1. / sqrt(2.)],
                               [0.],
@@ -113,9 +103,9 @@ if __name__ == '__main__':
 
     plt.figure(figsize=(12, 7))
 
-    measurements = np.array([[3, 4, 5]])
-    ancilla_state = np.array([0, 1, 2])
-    net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=6,
+    measurements = np.array([[1, 1]])
+    ancilla_state = np.array([0, 1])
+    net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2,
                 measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
 
     net_copy = net
@@ -123,11 +113,14 @@ if __name__ == '__main__':
     # net_copy.to(device)
     optimizer = torch.optim.Adam(net_copy.parameters(), lr=0.01, maximize=True)
     # optimizer = torch.optim.SGD(net_copy.parameters(), lr=0.01, nesterov=True, momentum=0.95, maximize=True)
-    f_history, p_history = run_method(net_copy, net_copy.loss2, optimizer, epochs)
+    best_circuit, f_history, p_history = run_method(net_copy, net_copy.loss2, optimizer, epochs)
     plt.plot(f_history, label="Fidelity")
     plt.plot(p_history, label="Probability")
 
-    print_circuit(net_copy.alphas.weight, net_copy.betas.weight, net_copy.gammas.weight)
+    net_copy = best_circuit
+    net_copy.to_loqc_tech("bell.txt")
+    bs_angles = net_copy.bs_angles.weight.data.view(-1, 2)
+    print_circuit(bs_angles[:, 0], bs_angles[:, 1], net_copy.ps_angles.weight.data.view(-1))
     fid, prob = net_copy.forward()
     print()
     print("Fidelity:", fid.data)

@@ -300,12 +300,8 @@ class LoNet(torch.nn.Module):
             beam_splitter = {
                 "id": id,
                 "type": "BS",
-                # "theta": f"{180. * bs_angles[counter][0] / pi:.6f}",
-                # "phi": f"{180. * bs_angles[counter][1] / pi:.6f}",
                 "theta": str(180. * bs_angles[counter][0] / pi),
                 "phi": str(180. * bs_angles[counter][1] / pi),
-                # "theta": "45",
-                # "phi": "0",
                 "n": "undefined",
                 "input_type": "undefined",
                 "x": str(int(50 + 1500 * (counter + 1) / len(self.topology.modes))),
@@ -349,9 +345,7 @@ class LoNet(torch.nn.Module):
                 "id": id,
                 "type": "PS",
                 "theta": "undefined",
-                # "phi": f"{180. * ps_angles[-1 - i] / pi:.6f}",
                 "phi": str(180. * ps_angles[-1 - i] / pi),
-                # "phi": "0",
                 "n": "undefined",
                 "input_type": "undefined",
                 "x": 1650,
@@ -422,7 +416,8 @@ class LoNet(torch.nn.Module):
         return f.max()
 
     def loss2(self, f, p):
-        p_min = 0.074
+        # p_min = 0.0735
+        p_min = 0.1062
         # p_min = 1. / 16.
         # p_min = 1. / 9.
 
