@@ -1,6 +1,6 @@
 import torch
 from math import tau
-from galopy.population import Population
+from galopy.population_old import Population
 
 
 class RandomPopulation(Population):

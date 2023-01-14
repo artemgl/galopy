@@ -4,7 +4,7 @@ import torch
 import json
 # from galopy.circuit_search import *
 from galopy.random_population import RandomPopulation
-from galopy.population import from_file, random
+from galopy.population_old import from_file, random
 
 
 if __name__ == "__main__":
@@ -16,23 +16,29 @@ if __name__ == "__main__":
                         [11, 12]],
                        [[13, 14],
                         [15, 16]]]], dtype=torch.int)
-    n_modes = 8
-    topology = torch.tensor([[[0, 1], [2, 3]], [[5, 4], [7, 6]]])
+    print(a.shape)
+    print(a)
+    print(a[..., 0].shape)
+    print(a[..., 0])
 
-    # pop = RandomPopulation(None, None, None, n_ancilla_photons=1, n_success_measurements=1)
-    # pop = random(None, None, None, n_ancilla_photons=1, n_success_measurements=1)
-    # pop.to_file("frog.json")
-    # pop.print()
-
-    # pop = from_file("frog.json", None, None, None)
-    # pop.print()
-
-    n_offsprings = 3
-    depth = 5
-    separators = torch.randint(0, depth, size=(n_offsprings, 1))
-    mask = torch.zeros(n_offsprings, depth, dtype=torch.bool)
-    mask.scatter_(dim=1, index=separators, value=True)
-    mask = torch.cumsum(mask, dim=1)
+    #
+    # n_modes = 8
+    # topology = torch.tensor([[[0, 1], [2, 3]], [[5, 4], [7, 6]]])
+    #
+    # # pop = RandomPopulation(None, None, None, n_ancilla_photons=1, n_success_measurements=1)
+    # # pop = random(None, None, None, n_ancilla_photons=1, n_success_measurements=1)
+    # # pop.to_file("frog.json")
+    # # pop.print()
+    #
+    # # pop = from_file("frog.json", None, None, None)
+    # # pop.print()
+    #
+    # n_offsprings = 3
+    # depth = 5
+    # separators = torch.randint(0, depth, size=(n_offsprings, 1))
+    # mask = torch.zeros(n_offsprings, depth, dtype=torch.bool)
+    # mask.scatter_(dim=1, index=separators, value=True)
+    # mask = torch.cumsum(mask, dim=1)
 
     # t, _ = topology.sort()
     # print(t)
