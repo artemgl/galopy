@@ -17,9 +17,11 @@ if __name__ == "__main__":
                        [[13, 14],
                         [15, 16]]]], dtype=torch.int)
     print(a.shape)
-    print(a)
-    print(a[..., 0].shape)
-    print(a[..., 0])
+    print(a[0])
+    print(a[1])
+    print(a[-1])
+    # print(a[..., 0].shape)
+    # print(a[..., 0])
 
     #
     # n_modes = 8

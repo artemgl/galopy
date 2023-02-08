@@ -6,11 +6,6 @@ from galopy.population_old import random, from_file
 from galopy.progress_bar import print_progress_bar, reprint_progress_bar
 
 
-# Multiply to get angle in radians from int
-# TODO: move it out of here
-RADIANS = pi / 18000.
-
-
 class CircuitSearch:
     def __init__(self, device: str, matrix, input_basic_states, output_basic_states=None, depth=1,
                  n_ancilla_modes=0, n_ancilla_photons=0, n_success_measurements=1):

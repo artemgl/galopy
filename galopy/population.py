@@ -2,6 +2,8 @@ import torch
 from math import tau, pi, factorial
 import json
 from itertools import product
+import numpy as np
+from galopy.circuit import Circuit
 
 
 class Population:
@@ -83,7 +85,7 @@ class Population:
         self._mask_for_unitaries = other._mask_for_unitaries
         self._permutation_matrix = other._permutation_matrix
         self._normalization_matrix = other._normalization_matrix
-        self._inverted_normalization_matrix = other._inv_normalization_matrix
+        self._inverted_normalization_matrix = other._inverted_normalization_matrix
 
     # def set_precomputed(self, mask_for_unitaries, permutation_matrix, normalization_matrix, inv_normalization_matrix):
     #     self._mask_for_unitaries = mask_for_unitaries
@@ -459,6 +461,24 @@ class Population:
 
         return result
 
+    def __getitem__(self, item):
+        bs_angles = self.bs_angles[item, ...]
+        ps_angles = self.ps_angles[item, ...]
+        topologies = self.topologies[item, ...]
+        initial_ancilla_states = self.initial_ancilla_states[item, ...]
+        measurements = self.measurements[item, ...]
+
+        if isinstance(item, int):
+            result = Circuit(self.n_modes, self.n_modes - self.n_ancilla_modes, bs_angles, ps_angles, topologies,
+                             initial_ancilla_states, measurements)
+        else:
+            result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles,
+                                topologies, initial_ancilla_states, measurements, self.device)
+            result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
+                                   self._inverted_normalization_matrix)
+
+        return result
+
 
 class RandomPopulation(Population):
     def __init__(self, n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=0, n_state_photons=0,
@@ -535,6 +555,7 @@ class FromFilePopulation(Population):
 
 class RealPopulation(Population):
     def __init__(self, decorated):
+        self.decorated = decorated
         # params = decorated.get_parameters()
         # super().__init__(params["n_modes"], params["n_ancilla_modes"], params["bs_angles"], params["ps_angles"],
         #                  params["topologies"], params["initial_ancilla_states"], params["measurements"])
@@ -631,3 +652,32 @@ class RealPopulation(Population):
             self.measurements[mask] += deltas
 
         self._normalize_data()
+
+    def __getitem__(self, item):
+        bs_angles = self.bs_angles[item, ...]
+        ps_angles = self.ps_angles[item, ...]
+        topologies = self.topologies[item, ...]
+        initial_ancilla_states = self.initial_ancilla_states[item, ...]
+        measurements = self.measurements[item, ...]
+
+        if isinstance(item, int):
+            result = Circuit(self.n_modes, self.n_modes - self.n_ancilla_modes,
+                             np.concatenate((bs_angles.view(-1, 1), np.zeros((bs_angles.size, 1))), axis=1),
+                             pi * ps_angles, topologies, initial_ancilla_states, measurements)
+            return result
+        else:
+            result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles,
+                                topologies, initial_ancilla_states, measurements, self.device)
+            result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
+                                   self._inverted_normalization_matrix)
+
+            return RealPopulation(result)
+
+    def crossover(self, n_offsprings):
+        return RealPopulation(self.decorated.crossover(n_offsprings))
+
+    def select(self, fitness, n_to_select):
+        return RealPopulation(self.decorated.select(fitness, n_to_select))
+
+    def __add__(self, other):
+        return RealPopulation(self.decorated + other)
