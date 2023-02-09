@@ -10,7 +10,7 @@ class Topology:
         self.modes = self._gen()
 
     def _gen(self):
-        return torch.tensor([[]], device=self.device)
+        return np.array([[]])
 
     # TODO: optimize
     def gen_unitary(self, bs_angles, ps_angles):
@@ -41,8 +41,8 @@ class Topology:
 # x x| x|   x|   x|   x|   x|
 # x  x  x    x    x    x    x
 class Parallel(Topology):
-    def __init__(self, n_modes):
-        super().__init__(n_modes)
+    def __init__(self, n_modes, device='cuda'):
+        super().__init__(n_modes, device=device)
 
     def _gen(self):
         res = []
@@ -82,8 +82,8 @@ class Parallel(Topology):
 # x|||||| xxxxxx
 # xxxxxxx
 class Stable(Topology):
-    def __init__(self, n_modes):
-        super().__init__(n_modes)
+    def __init__(self, n_modes, device='cuda'):
+        super().__init__(n_modes, device=device)
 
     def _gen(self):
         res = []
@@ -102,14 +102,26 @@ class Stable(Topology):
 # xxxxxxxxxxxxx
 # x x x x x x x
 class Pyramidal(Topology):
-    def __init__(self, n_modes):
-        super().__init__(n_modes)
+    def __init__(self, n_modes, device='cuda'):
+        super().__init__(n_modes, device=device)
 
     def _gen(self):
         res = []
         for i in range(self.n_modes - 1):
             for j in range(i + 1):
                 res.append([i - j, i - j + 1])
+        return np.array(res)
+
+
+class Clements(Topology):
+    def __init__(self, n_modes, device='cuda'):
+        super().__init__(n_modes, device=device)
+
+    def _gen(self):
+        res = []
+        for i in range(self.n_modes):
+            for j in range(i % 2, self.n_modes - 1, 2):
+                res.append([j, j + 1])
         return np.array(res)
 
 

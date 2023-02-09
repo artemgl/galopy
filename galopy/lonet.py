@@ -61,7 +61,7 @@ class LoNet(torch.nn.Module):
         self.n_photons = self.n_state_photons + self.n_ancilla_photons
 
         if topology is None:
-            self.topology = tl.Parallel(self.n_modes)
+            self.topology = tl.Parallel(self.n_modes, device=device)
         else:
             self.topology = topology
 
@@ -290,13 +290,15 @@ class LoNet(torch.nn.Module):
         bs_angles = self.bs_angles.weight.data.view(-1, 2).cpu().numpy()
 
         counter = 0
+        right_edge = 0
         beam_splitters = []
         for i, j in self.topology.modes:
             if abs(bs_angles[counter][0]) < 0.0001:
                 counter += 1
                 continue
 
-            id = "bs" + str(i) + str(j)
+            # id = "bs" + str(i) + "_" + str(j) + "_" + str(counter)
+            id = "bs" + str(counter)
             beam_splitter = {
                 "id": id,
                 "type": "BS",
@@ -304,7 +306,7 @@ class LoNet(torch.nn.Module):
                 "phi": str(180. * bs_angles[counter][1] / pi),
                 "n": "undefined",
                 "input_type": "undefined",
-                "x": str(int(50 + 1500 * (counter + 1) / len(self.topology.modes))),
+                "x": str(int(50 + 1500 * (right_edge + 1) / len(self.topology.modes))),
                 "y": str(int(40 + 85 * (self.n_modes - 1) - 42.5 * (i + j)))
             }
             beam_splitters.append(beam_splitter)
@@ -332,6 +334,7 @@ class LoNet(torch.nn.Module):
             frontier[j] = id, "hybrid1"
 
             counter += 1
+            right_edge += 1
 
         ps_angles = self.ps_angles.weight.data.view(-1).cpu().numpy()
 
@@ -416,8 +419,8 @@ class LoNet(torch.nn.Module):
         return f.max()
 
     def loss2(self, f, p):
-        # p_min = 0.0735
-        p_min = 0.1062
+        p_min = 2. / 27.
+        # p_min = 0.1062
         # p_min = 1. / 16.
         # p_min = 1. / 9.
 

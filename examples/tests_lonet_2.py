@@ -74,8 +74,8 @@ def loss(pred, target):
 
 if __name__ == '__main__':
 
-    device = 'cuda:0'
-    # device = 'cpu'
+    # device = 'cuda:0'
+    device = 'cpu'
     epochs = 1000
 
     target_matrix = np.array([[1. / sqrt(2.)],

@@ -113,8 +113,8 @@ def loss(pred, target):
 
 if __name__ == '__main__':
 
-    device = 'cuda:0'
-    # device = 'cpu'
+    # device = 'cuda:0'
+    device = 'cpu'
     epochs = 2000
 
     # target_matrix = np.array([[1., 0., 0., 0.],
@@ -171,34 +171,34 @@ if __name__ == '__main__':
     # input_basic_states = np.array([[0], [1], [2], [3], [4], [5]])
     # input_basic_states = np.array([[1], [0]])
 
-    # input_basic_states = np.array([[2, 3],
-    #                                [0, 3],
-    #                                [1, 2],
-    #                                [0, 1]])
-    # output_basic_states = np.array([[2, 3],
-    #                                 [0, 3],
-    #                                 [1, 2],
-    #                                 [0, 1],
-    #                                 [0, 0],
-    #                                 [1, 1],
-    #                                 [2, 2],
-    #                                 [3, 3],
-    #                                 [1, 3],
-    #                                 [0, 2]])
-    input_basic_states = np.array([[0, 2],
+    input_basic_states = np.array([[2, 3],
                                    [0, 3],
                                    [1, 2],
-                                   [1, 3]])
-    output_basic_states = np.array([[0, 2],
+                                   [0, 1]])
+    output_basic_states = np.array([[2, 3],
                                     [0, 3],
                                     [1, 2],
-                                    [1, 3],
+                                    [0, 1],
                                     [0, 0],
                                     [1, 1],
                                     [2, 2],
                                     [3, 3],
-                                    [0, 1],
-                                    [2, 3]])
+                                    [1, 3],
+                                    [0, 2]])
+    # input_basic_states = np.array([[0, 2],
+    #                                [0, 3],
+    #                                [1, 2],
+    #                                [1, 3]])
+    # output_basic_states = np.array([[0, 2],
+    #                                 [0, 3],
+    #                                 [1, 2],
+    #                                 [1, 3],
+    #                                 [0, 0],
+    #                                 [1, 1],
+    #                                 [2, 2],
+    #                                 [3, 3],
+    #                                 [0, 1],
+    #                                 [2, 3]])
 
     # loss = torch.nn.L1Loss()
 
@@ -220,8 +220,10 @@ if __name__ == '__main__':
     # net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2,
     #             measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states)
     measurements = np.array([[0, 1]])
-    ancilla_state = np.array([1, 1])
-    topology = tl.Stable(6)
+    ancilla_state = np.array([0, 1])
+    # topology = tl.Clements(6, device)
+    # topology = tl.Pyramidal(6, device)
+    topology = tl.Stable(6, device)
     net = LoNet(target_matrix, input_basic_states, device=device, n_ancilla_modes=2,
                 measurements=measurements, ancilla_state=ancilla_state, output_basic_states=output_basic_states,
                 topology=topology)
