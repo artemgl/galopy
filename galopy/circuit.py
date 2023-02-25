@@ -13,29 +13,29 @@ class Circuit:
         self.initial_ancilla_state = initial_ancilla_state.cpu().numpy()
         self.measurements = measurements.cpu().numpy()
 
-    def print(self):
-        angles = self.bs_angles.view(-1).tolist()
-        angles = [f"{180. * angle / pi:.2f}" for angle in angles]
-
-        topology = self.topology.tolist()
-        topology = [f"{sublist[0]}, {sublist[1]}" for sublist in topology]
-
-        elements = pd.DataFrame({'Element': ['Beam splitter'] * self.topology.shape[0],
-                                 'Angles': angles,
-                                 'Modes': topology})
-
-        if self.initial_ancilla_state.size > 0:
-            modes_in = self.initial_ancilla_state.view(-1)
-            # TODO: print all the measurements
-            modes_out = self.measurements[0]
-
-            ancillas = pd.DataFrame({'Mode in': modes_in,
-                                     'Mode out': modes_out})
-            ancillas.index.name = 'Ancilla photon'
-
-            print(elements, ancillas, sep='\n')
-        else:
-            print(elements)
+    # def print(self):
+    #     angles = self.bs_angles.reshape(-1).tolist()
+    #     angles = [f"{180. * angle / pi:.2f}" for angle in angles]
+    #
+    #     topology = self.topology.tolist()
+    #     topology = [f"{sublist[0]}, {sublist[1]}" for sublist in topology]
+    #
+    #     elements = pd.DataFrame({'Element': ['Beam splitter'] * self.topology.shape[0],
+    #                              'Angles': angles,
+    #                              'Modes': topology})
+    #
+    #     if self.initial_ancilla_state.size > 0:
+    #         modes_in = self.initial_ancilla_state.reshape(-1)
+    #         # TODO: print all the measurements
+    #         modes_out = self.measurements[0]
+    #
+    #         ancillas = pd.DataFrame({'Mode in': modes_in,
+    #                                  'Mode out': modes_out})
+    #         ancillas.index.name = 'Ancilla photon'
+    #
+    #         print(elements, ancillas, sep='\n')
+    #     else:
+    #         print(elements)
 
     def to_loqc_tech(self, filename):
         photon_sources = []
@@ -60,17 +60,18 @@ class Circuit:
         n_connection = 0
         frontier = [("in" + str(i), "hybrid0") for i in range(self.n_modes)]
 
-        bs_angles = self.bs_angles.view(-1, 2)
+        bs_angles = self.bs_angles.reshape(-1, 2)
 
-        front_counter = 0
         counter = 0
+        right_edge = 0
         beam_splitters = []
         for i, j in self.topology:
             if abs(bs_angles[counter][0]) < 0.0001:
                 counter += 1
                 continue
 
-            id = "bs" + str(i) + str(j)
+            # id = "bs" + str(i) + "_" + str(j) + "_" + str(counter)
+            id = "bs" + str(counter)
             beam_splitter = {
                 "id": id,
                 "type": "BS",
@@ -78,7 +79,7 @@ class Circuit:
                 "phi": str(180. * bs_angles[counter][1] / pi),
                 "n": "undefined",
                 "input_type": "undefined",
-                "x": str(int(50 + 1500 * (front_counter + 1) / len(self.topology[:, 0]))),
+                "x": str(int(50 + 1500 * (right_edge + 1) / len(self.topology))),
                 "y": str(int(40 + 85 * (self.n_modes - 1) - 42.5 * (i + j)))
             }
             beam_splitters.append(beam_splitter)
@@ -106,9 +107,9 @@ class Circuit:
             frontier[j] = id, "hybrid1"
 
             counter += 1
-            front_counter += 1
+            right_edge += 1
 
-        ps_angles = self.ps_angles.view(-1)
+        ps_angles = self.ps_angles.reshape(-1)
 
         phase_shifters = []
         for i in range(self.n_modes):
@@ -123,7 +124,7 @@ class Circuit:
                 "phi": str(180. * ps_angles[-1 - i] / pi),
                 "n": "undefined",
                 "input_type": "undefined",
-                "x": str(int(50 + 1500 * (front_counter + 1) / len(self.topology[:, 0]))),
+                "x": 1650,
                 "y": 50 + 85 * i
             }
             phase_shifters.append(phase_shifter)
@@ -150,7 +151,7 @@ class Circuit:
                 "phi": "undefined",
                 "n": "-",
                 "input_type": "1",
-                "x": str(int(85 + 1500 * (front_counter + 1) / len(self.topology[:, 0]))),
+                "x": 1700,
                 "y": 50 + 85 * i
             }
             photon_detections.append(detection)
@@ -167,19 +168,21 @@ class Circuit:
 
         n_ancilla_modes = self.n_modes - self.n_state_modes
 
-        ancillas_in = [0] * n_ancilla_modes
-        ancilla_state = self.initial_ancilla_state.view(-1)
-        for i in ancilla_state:
-            ancillas_in[i] += 1
-        for i in range(n_ancilla_modes):
-            photon_sources[self.n_modes - 1 - i]["n"] = ancillas_in[i]
+        if self.initial_ancilla_state.size > 0:
+            ancillas_in = [0] * n_ancilla_modes
+            ancilla_state = self.initial_ancilla_state.reshape(-1)
+            for i in ancilla_state:
+                ancillas_in[i] += 1
+            for i in range(n_ancilla_modes):
+                photon_sources[self.n_modes - 1 - i]["n"] = ancillas_in[i]
 
-        ancillas_out = [0] * n_ancilla_modes
-        measurements = self.measurements.view(-1, self.initial_ancilla_state.size)
-        for i in measurements[0]:
-            ancillas_out[i] += 1
-        for i in range(n_ancilla_modes):
-            photon_detections[self.n_modes - 1 - i]["n"] = ancillas_out[i]
+        if self.measurements.size > 0:
+            ancillas_out = [0] * n_ancilla_modes
+            measurements = self.measurements.reshape(-1, self.initial_ancilla_state.size)
+            for i in measurements[0]:
+                ancillas_out[i] += 1
+            for i in range(n_ancilla_modes):
+                photon_detections[self.n_modes - 1 - i]["n"] = ancillas_out[i]
 
         data = {
             "objects": photon_sources + beam_splitters + phase_shifters + photon_detections,

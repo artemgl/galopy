@@ -2,8 +2,8 @@ import torch
 from math import pi, factorial
 from time import time
 from itertools import product
-from galopy.population_old import random, from_file
-from galopy.progress_bar import print_progress_bar, reprint_progress_bar
+from galopy.progress_bar import print_progress_bar
+from galopy.population import RandomPopulation, FromFilePopulation
 
 
 class CircuitSearch:
@@ -73,12 +73,12 @@ class CircuitSearch:
 
         self.n_success_measurements = n_success_measurements
 
-        # Init indices for flexible slicing
-        self._start_idx_rz_angles = 0
-        self._start_idx_ry_angles = 2 * self.depth
-        self._start_idx_modes = 3 * self.depth
-        self._start_idx_ancilla_state_in = 5 * self.depth
-        self._start_idx_ancilla_state_out = 5 * self.depth + self.n_ancilla_photons
+        # # Init indices for flexible slicing
+        # self._start_idx_rz_angles = 0
+        # self._start_idx_ry_angles = 2 * self.depth
+        # self._start_idx_modes = 3 * self.depth
+        # self._start_idx_ancilla_state_in = 5 * self.depth
+        # self._start_idx_ancilla_state_out = 5 * self.depth + self.n_ancilla_photons
 
     #     self._precompute_matrices()
     #
@@ -180,7 +180,7 @@ class CircuitSearch:
         return torch.where(fidelities > 0.999, 100. * probabilities, fidelities)
 
     def run(self, min_probability, n_generations, n_offsprings, n_elite,
-            source_file=None, result_file=None, ptype='universal'):
+            source_file=None, result_file=None):
         """
         Launch search. The algorithm stops in one of these cases:
             * After `n_generations` generations
@@ -208,23 +208,20 @@ class CircuitSearch:
 
         # Get initial population
         if source_file is None:
-            population = random(self._permutation_matrix,
-                                self._normalization_matrix, self._inverted_normalization_matrix,
-                                n_individuals=n_population, depth=self.depth, n_modes=self.n_modes,
-                                n_ancilla_modes=self.n_ancilla_modes, n_ancilla_photons=self.n_ancilla_photons,
-                                n_success_measurements=self.n_success_measurements, device=self.device, ptype=ptype)
+            population = RandomPopulation(n_individuals=n_population, depth=self.depth, n_modes=self.n_modes,
+                                          n_ancilla_modes=self.n_ancilla_modes, n_state_photons=self.n_state_photons,
+                                          n_ancilla_photons=self.n_ancilla_photons,
+                                          n_success_measurements=self.n_success_measurements, device=self.device)
         else:
-            circuits = from_file(source_file,
-                                 self._permutation_matrix,
-                                 self._normalization_matrix, self._inverted_normalization_matrix, device=self.device,
-                                 ptype=ptype)
+            circuits = FromFilePopulation(source_file, device=self.device)
             n_circuits = circuits.n_individuals
             if n_circuits < n_population:
-                population = random(self._permutation_matrix,
-                                    self._normalization_matrix, self._inverted_normalization_matrix,
-                                    n_individuals=n_population - n_circuits, depth=self.depth, n_modes=self.n_modes,
-                                    n_ancilla_modes=self.n_ancilla_modes, n_ancilla_photons=self.n_ancilla_photons,
-                                    n_success_measurements=self.n_success_measurements, device=self.device, ptype=ptype)
+                population = RandomPopulation(n_individuals=n_population - n_circuits, depth=self.depth,
+                                              n_modes=self.n_modes,
+                                              n_ancilla_modes=self.n_ancilla_modes,
+                                              n_state_photons=self.n_state_photons,
+                                              n_ancilla_photons=self.n_ancilla_photons,
+                                              n_success_measurements=self.n_success_measurements, device=self.device)
                 population = circuits + population
             else:
                 population = circuits
@@ -255,7 +252,7 @@ class CircuitSearch:
             # print("Generation:", i + 1)
             best_fitness = fitness.max().item()
             # print("Best fitness:", best_fitness)
-            reprint_progress_bar(best_fitness, length=40, percentage=(i + 1.) / n_generations)
+            print_progress_bar(best_fitness, length=40, percentage=(i + 1.) / n_generations, reprint=True)
 
             # If circuit with high enough fitness is found, stop
             if best_fitness >= 100. * min_probability:
@@ -272,7 +269,8 @@ class CircuitSearch:
 
         # Print result info
         print("Circuit:")
-        best.print(0)
+        best[0].to_loqc_tech("result")
+        # best[0].print()
         f, p = self.__get_fidelity_and_probability(best)
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())

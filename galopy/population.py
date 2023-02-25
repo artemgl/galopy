@@ -202,6 +202,8 @@ class Population:
         unitaries = self._read_scheme_unitary()
         unitaries = unitaries.reshape(*size_mtx)
 
+        # print(state_vector.shape)
+
         # Apply unitaries to all photons in state
         state_vector = unitaries.matmul(state_vector)
         # TODO: matrix reshape instead of vector transposing ?
@@ -397,8 +399,7 @@ class Population:
 
         result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles, topologies,
                             initial_ancilla_states, measurements, self.device)
-        result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
-                               self._inverted_normalization_matrix)
+        result.set_precomputed(self)
 
         return result
 
@@ -442,8 +443,9 @@ class Population:
 
         result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles, topologies,
                             initial_ancilla_states, measurements, self.device)
-        result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
-                               self._inverted_normalization_matrix)
+        result.set_precomputed(self)
+        # result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
+        #                        self._inverted_normalization_matrix)
 
         return result, fitness
 
@@ -456,8 +458,7 @@ class Population:
 
         result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles, topologies,
                             initial_ancilla_states, measurements, self.device)
-        result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
-                               self._inverted_normalization_matrix)
+        result.set_precomputed(self)
 
         return result
 
@@ -474,8 +475,7 @@ class Population:
         else:
             result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles,
                                 topologies, initial_ancilla_states, measurements, self.device)
-            result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
-                                   self._inverted_normalization_matrix)
+            result.set_precomputed(self)
 
         return result
 
@@ -543,141 +543,3 @@ class FromFilePopulation(Population):
         super().__init__(n_modes, n_ancilla_modes, n_state_photons, bs_angles, ps_angles, topologies,
                          initial_ancilla_states, measurements)
         super().precompute_extra()
-
-
-# class PopulationDecorator(Population):
-#     def __init__(self, decorated):
-#         self.decorated = decorated
-#         # super(PopulationDecorator, self).__init__(*decorated.get_parameters())
-#         super().__init__(*decorated.get_parameters())
-#         super().set_precomputed(decorated)
-
-
-class RealPopulation(Population):
-    def __init__(self, decorated):
-        self.decorated = decorated
-        # params = decorated.get_parameters()
-        # super().__init__(params["n_modes"], params["n_ancilla_modes"], params["bs_angles"], params["ps_angles"],
-        #                  params["topologies"], params["initial_ancilla_states"], params["measurements"])
-        super().__init__(*decorated.get_parameters())
-        self.bs_angles = self.bs_angles[..., 0].copy()
-        self.ps_angles = self.ps_angles.to(torch.int8)
-        super().set_precomputed(decorated)
-
-    # TODO: при нескольких измерениях не допускать повторяющиеся
-    def _normalize_data(self):
-        """
-        Bring the data to a convenient form.
-        """
-        self.bs_angles %= tau
-        self.ps_angles %= 2
-
-        self.topologies %= self.n_work_modes
-        x = self.topologies[..., 0]
-        y = self.topologies[..., 1]
-        mask = x == y
-        y[mask] += 1
-        y[mask] %= self.n_work_modes
-        self.topologies, _ = self.topologies.sort()
-
-        if self.n_ancilla_modes > 0:
-            self.initial_ancilla_states, _ = (self.initial_ancilla_states % self.n_ancilla_modes).sort()
-            self.measurements, _ = (self.measurements % self.n_ancilla_modes).sort()
-
-    def _read_scheme_unitary(self):
-        """Read genome and return the unitary transformation of the scheme it represents."""
-        depth = self.topologies.shape[1]
-
-        # Indices to slice correctly
-        # TODO: Move to outer scope
-        indices_0 = torch.tensor([[i] * 4 * depth for i in range(self.n_individuals)], device=self.device)\
-            .reshape(-1, depth, 4)
-        indices_1 = torch.tensor([[i, i, i, i] for i in range(depth)] * self.n_individuals, device=self.device)\
-            .reshape(-1, depth, 4)
-        indices_2 = self.topologies[..., [0, 0, 1, 1]]
-        indices_3 = self.topologies[..., [0, 1, 0, 1]]
-
-        # Get angles
-        thetas = self.bs_angles
-
-        # Write unitary coefficients for each beam splitter
-        unitaries_coeffs = torch.zeros(self.n_individuals, depth, 4, device=self.device, dtype=torch.complex64)
-        unitaries_coeffs[:, :, 0] = torch.cos(thetas)
-        unitaries_coeffs[:, :, 1] = torch.sin(thetas)
-        unitaries_coeffs[:, :, 2] = -torch.sin(thetas)
-        unitaries_coeffs[:, :, 3] = torch.cos(thetas)
-
-        # Create an unitary for each beam splitter
-        unitaries = torch.zeros(self.n_individuals, depth, self.n_modes, self.n_modes,
-                                device=self.device, dtype=torch.complex64)
-        unitaries[:, :, self._mask_for_unitaries] = 1.
-        unitaries[indices_0.long(), indices_1.long(), indices_2.long(), indices_3.long()] = unitaries_coeffs
-
-        # Multiply all the unitaries to get one for the whole scheme
-        # TODO: Optimize
-        for i in range(1, depth):
-            unitaries[:, 0] = unitaries[:, i].matmul(unitaries[:, 0])
-
-        unitaries_ps = torch.zeros(self.n_individuals, self.n_modes, self.n_modes,
-                                   device=self.device, dtype=torch.complex64)
-        coeffs = self.ps_angles
-        if self.n_work_modes < self.n_modes:
-            coeffs = torch.cat((coeffs, torch.zeros(self.n_individuals, self.n_modes - self.n_work_modes,
-                                                    device=self.device)), dim=1)
-        unitaries_ps[:, self._mask_for_unitaries] = torch.where(coeffs == 0, 1, -1)
-
-        return unitaries_ps.matmul(unitaries[:, 0])
-
-    def mutate(self, mutation_probability):
-        """Mutate individuals."""
-        mask = torch.rand_like(self.bs_angles, device=self.device) < mutation_probability
-        deltas = torch.rand(size=(mask.sum().item(),), device=self.device) * 0.5 * pi - 0.25 * pi
-        self.bs_angles[mask] += deltas
-
-        mask = torch.rand_like(self.ps_angles, device=self.device) < mutation_probability
-        deltas = torch.randint(0, 2, size=(mask.sum().item(),), device=self.device)
-        self.ps_angles[mask] += deltas
-
-        mask = torch.rand_like(self.topologies, device=self.device, dtype=torch.float) < mutation_probability
-        deltas = torch.randint(0, self.n_work_modes, size=(mask.sum().item(),), device=self.device)
-        self.topologies[mask] += deltas
-
-        if self.n_ancilla_modes > 0:
-            mask = torch.rand_like(self.initial_ancilla_states, device=self.device, dtype=torch.float) < mutation_probability
-            deltas = torch.randint(0, self.n_ancilla_modes, size=(mask.sum().item(),), device=self.device)
-            self.initial_ancilla_states[mask] += deltas
-
-            mask = torch.rand_like(self.measurements, device=self.device, dtype=torch.float) < mutation_probability
-            deltas = torch.randint(0, self.n_ancilla_modes, size=(mask.sum().item(),), device=self.device)
-            self.measurements[mask] += deltas
-
-        self._normalize_data()
-
-    def __getitem__(self, item):
-        bs_angles = self.bs_angles[item, ...]
-        ps_angles = self.ps_angles[item, ...]
-        topologies = self.topologies[item, ...]
-        initial_ancilla_states = self.initial_ancilla_states[item, ...]
-        measurements = self.measurements[item, ...]
-
-        if isinstance(item, int):
-            result = Circuit(self.n_modes, self.n_modes - self.n_ancilla_modes,
-                             np.concatenate((bs_angles.view(-1, 1), np.zeros((bs_angles.size, 1))), axis=1),
-                             pi * ps_angles, topologies, initial_ancilla_states, measurements)
-            return result
-        else:
-            result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles,
-                                topologies, initial_ancilla_states, measurements, self.device)
-            result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
-                                   self._inverted_normalization_matrix)
-
-            return RealPopulation(result)
-
-    def crossover(self, n_offsprings):
-        return RealPopulation(self.decorated.crossover(n_offsprings))
-
-    def select(self, fitness, n_to_select):
-        return RealPopulation(self.decorated.select(fitness, n_to_select))
-
-    def __add__(self, other):
-        return RealPopulation(self.decorated + other)
