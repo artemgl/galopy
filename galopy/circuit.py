@@ -168,21 +168,21 @@ class Circuit:
 
         n_ancilla_modes = self.n_modes - self.n_state_modes
 
+        ancillas_in = [0] * n_ancilla_modes
         if self.initial_ancilla_state.size > 0:
-            ancillas_in = [0] * n_ancilla_modes
             ancilla_state = self.initial_ancilla_state.reshape(-1)
             for i in ancilla_state:
                 ancillas_in[i] += 1
-            for i in range(n_ancilla_modes):
-                photon_sources[self.n_modes - 1 - i]["n"] = ancillas_in[i]
+        for i in range(n_ancilla_modes):
+            photon_sources[self.n_modes - 1 - i]["n"] = ancillas_in[i]
 
+        ancillas_out = [0] * n_ancilla_modes
         if self.measurements.size > 0:
-            ancillas_out = [0] * n_ancilla_modes
             measurements = self.measurements.reshape(-1, self.initial_ancilla_state.size)
             for i in measurements[0]:
                 ancillas_out[i] += 1
-            for i in range(n_ancilla_modes):
-                photon_detections[self.n_modes - 1 - i]["n"] = ancillas_out[i]
+        for i in range(n_ancilla_modes):
+            photon_detections[self.n_modes - 1 - i]["n"] = ancillas_out[i]
 
         data = {
             "objects": photon_sources + beam_splitters + phase_shifters + photon_detections,
