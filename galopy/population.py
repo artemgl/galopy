@@ -2,7 +2,6 @@ import torch
 from math import tau, pi, factorial
 import json
 from itertools import product
-import numpy as np
 from galopy.circuit import Circuit
 
 
@@ -28,14 +27,6 @@ class Population:
         self.initial_ancilla_states = initial_ancilla_state
         self.measurements = measurements
 
-        # self.n_modes = 2
-        # self.n_ancilla_modes = 0
-        # self.bs_angles = torch.tensor([])
-        # self.ps_angles = torch.tensor([])
-        # self.topologies = torch.tensor([])
-        # self.initial_ancilla_states = torch.tensor([])
-        # self.measurements = torch.tensor([])
-
     def get_parameters(self):
         return (
             self.n_modes,
@@ -47,51 +38,11 @@ class Population:
             self.measurements
         )
 
-    # def get_parameters(self):
-    #     return {
-    #         "n_modes": self.n_modes,
-    #         "n_ancilla_modes": self.n_ancilla_modes,
-    #         "bs_angles": self.bs_angles,
-    #         "ps_angles": self.ps_angles,
-    #         "topologies": self.topologies,
-    #         "initial_ancilla_states": self.initial_ancilla_states,
-    #         "measurements": self.measurements
-    #     }
-    # def print(self, i):
-    #     angles = self.bs_angles[i].view(-1).cpu().numpy().tolist()
-    #     angles = [f"{180. * angle / pi:.2f}" for angle in angles]
-    #
-    #     topology = self._topologies[i].cpu().numpy().tolist()
-    #     topology = [f"{sublist[0]}, {sublist[1]}" for sublist in topology]
-    #
-    #     elements = pd.DataFrame({'Element': ['Beam splitter'] * self.depth,
-    #                              'Angles': angles,
-    #                              'Modes': topology})
-    #
-    #     if self.n_ancilla_photons > 0:
-    #         modes_in = self._initial_ancilla_states[i].view(-1).cpu().numpy()
-    #         # TODO: print all the measurements
-    #         modes_out = self._measurements[i][0].cpu().numpy()
-    #
-    #         ancillas = pd.DataFrame({'Mode in': modes_in,
-    #                                  'Mode out': modes_out})
-    #         ancillas.index.name = 'Ancilla photon'
-    #
-    #         print(elements, ancillas, sep='\n')
-    #     else:
-    #         print(elements)
-
     def set_precomputed(self, other):
         self._mask_for_unitaries = other._mask_for_unitaries
         self._permutation_matrix = other._permutation_matrix
         self._normalization_matrix = other._normalization_matrix
         self._inverted_normalization_matrix = other._inverted_normalization_matrix
-
-    # def set_precomputed(self, mask_for_unitaries, permutation_matrix, normalization_matrix, inv_normalization_matrix):
-    #     self._mask_for_unitaries = mask_for_unitaries
-    #     self._permutation_matrix = permutation_matrix
-    #     self._normalization_matrix = normalization_matrix
-    #     self._inverted_normalization_matrix = inv_normalization_matrix
 
     def precompute_extra(self):
         """Compute auxiliary objects."""
@@ -201,8 +152,6 @@ class Population:
         # Get unitary transforms
         unitaries = self._read_scheme_unitary()
         unitaries = unitaries.reshape(*size_mtx)
-
-        # print(state_vector.shape)
 
         # Apply unitaries to all photons in state
         state_vector = unitaries.matmul(state_vector)
@@ -444,8 +393,6 @@ class Population:
         result = Population(self.n_modes, self.n_ancilla_modes, self.n_state_photons, bs_angles, ps_angles, topologies,
                             initial_ancilla_states, measurements, self.device)
         result.set_precomputed(self)
-        # result.set_precomputed(self._mask_for_unitaries, self._permutation_matrix, self._normalization_matrix,
-        #                        self._inverted_normalization_matrix)
 
         return result, fitness
 
@@ -483,24 +430,6 @@ class Population:
 class RandomPopulation(Population):
     def __init__(self, n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=0, n_state_photons=0,
                  n_ancilla_photons=0, n_success_measurements=0, device='cpu'):
-        # self.n_modes = n_modes
-        # self.n_ancilla_modes = n_ancilla_modes
-        #
-        # self.bs_angles = torch.rand(n_individuals, depth, 2, device=device) * tau
-        # self.ps_angles = torch.rand(n_individuals, n_modes, device=device) * tau
-        #
-        # self.topologies = torch.randint(0, n_modes, (n_individuals, depth, 2), device=device, dtype=torch.int8)
-        #
-        # if n_ancilla_modes > 0:
-        #     self.initial_ancilla_states = torch.randint(0, n_ancilla_modes,
-        #                                            (n_individuals, n_ancilla_photons),
-        #                                            device=device, dtype=torch.int8)
-        #     self.measurements = torch.randint(0, n_ancilla_modes,
-        #                                  (n_individuals, n_success_measurements, n_ancilla_photons),
-        #                                  device=device, dtype=torch.int8)
-        # else:
-        #     self.initial_ancilla_states = torch.tensor([[]], device=device)
-        #     self.measurements = torch.tensor([[[]]], device=device)
         bs_angles = torch.rand(n_individuals, depth, 2, device=device) * tau
         ps_angles = torch.rand(n_individuals, n_modes, device=device) * tau
 
@@ -518,20 +447,13 @@ class RandomPopulation(Population):
             measurements = torch.tensor([[[]]], device=device)
 
         super().__init__(n_modes, n_ancilla_modes, n_state_photons, bs_angles, ps_angles, topologies,
-                         initial_ancilla_states, measurements)
+                         initial_ancilla_states, measurements, device)
         super().precompute_extra()
 
 
 class FromFilePopulation(Population):
     def __init__(self, file_name, device='cpu'):
         with open(file_name, 'r') as f:
-            # self.n_modes = int(f.readline())
-            # self.n_ancilla_modes = int(f.readline())
-            # self.bs_angles = torch.tensor(json.loads(f.readline()), device=device)
-            # self.ps_angles = torch.tensor(json.loads(f.readline()), device=device)
-            # self.topologies = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
-            # self.initial_ancilla_states = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
-            # self.measurements = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
             n_modes = int(f.readline())
             n_ancilla_modes = int(f.readline())
             n_state_photons = int(f.readline())
@@ -541,5 +463,5 @@ class FromFilePopulation(Population):
             initial_ancilla_states = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
             measurements = torch.tensor(json.loads(f.readline()), device=device, dtype=torch.int8)
         super().__init__(n_modes, n_ancilla_modes, n_state_photons, bs_angles, ps_angles, topologies,
-                         initial_ancilla_states, measurements)
+                         initial_ancilla_states, measurements, device)
         super().precompute_extra()

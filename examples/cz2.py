@@ -4,8 +4,8 @@ from galopy.circuit_search import *
 if __name__ == "__main__":
     # Initialize parameters
     min_probability = 1. / 16.
-    n_offsprings = 600
-    n_elite = 400
+    n_offsprings = 400
+    n_elite = 200
     n_generations = 100
 
     # Gate represented as a matrix

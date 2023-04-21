@@ -23,6 +23,6 @@ if __name__ == "__main__":
                              [1],
                              [0]])
     # Create an instance of search
-    search = CircuitSearch('cuda', matrix, input_basic_states=basic_states, depth=4,
+    search = CircuitSearch('cpu', matrix, input_basic_states=basic_states, depth=4,
                            n_ancilla_modes=0, n_ancilla_photons=0)
     search.run(min_probability, n_generations, n_offsprings, n_elite)

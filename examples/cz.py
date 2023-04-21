@@ -4,9 +4,7 @@ from galopy.circuit_search import *
 if __name__ == "__main__":
     # Initialize parameters
     min_probability = 1. / 9.
-    n_population = 2000
-    n_offsprings = 400
-    # n_mutated = 2000
+    n_offsprings = 1200
     n_elite = 800
     n_generations = 300
 

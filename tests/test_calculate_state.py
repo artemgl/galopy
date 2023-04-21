@@ -1,5 +1,5 @@
 import unittest
-from math import sqrt
+from math import sqrt, factorial
 from tests.utils import *
 
 

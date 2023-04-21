@@ -1,7 +1,5 @@
 import torch
-from math import pi, factorial
 from time import time
-from itertools import product
 from galopy.progress_bar import print_progress_bar
 from galopy.population import RandomPopulation, FromFilePopulation
 
@@ -12,22 +10,21 @@ class CircuitSearch:
         """
         Algorithm searching a circuit.
         Parameters:
-            device: The device on which you want to store data and perform calculations (e.g. 'cuda')
+            device: The device on which you want to store data and perform calculations (e.g. 'cuda').
 
-            matrix: Matrix representing desired transform in the basis of basic states
+            matrix: Matrix representing the desired transform.
 
-            input_basic_states: Basic states on which transform is performed
+            input_basic_states: Basic states on which transform is performed.
 
-            output_basic_states: Basic states which are counted as output
+            output_basic_states: Basic states which are counted as output.
 
-            depth: Number of local two-mode unitary transforms. One transform contains two phase shifters and one
-            beam splitter. Must be > 0
+            depth: Number of beam splitters in the circuit. Must be > 0.
 
-            n_ancilla_modes: Number of modes in which ancilla photons are
+            n_ancilla_modes: Number of modes in which ancilla photons are.
 
-            n_ancilla_photons: Number of ancilla photons
+            n_ancilla_photons: Number of ancilla photons.
 
-            n_success_measurements: Count of measurements that we consider as successful gate operation. Must be > 0
+            n_success_measurements: Count of measurements that we consider as successful gate operation. Must be > 0.
         """
         if n_ancilla_modes == 0 and n_ancilla_photons > 0:
             raise Exception("If number of ancilla modes is zero, number of ancilla photons must be zero as well")
@@ -60,7 +57,7 @@ class CircuitSearch:
         self.n_state_modes = input_basic_states.max().item() + 1
 
         self.n_ancilla_modes = n_ancilla_modes
-        # Total number of modes in scheme
+        # Total number of modes in circuit
         self.n_modes = self.n_state_modes + n_ancilla_modes
         # Number of modes in which unitary transform is performed
         # It's considered that all of ancilla modes always participate in this transform
@@ -73,73 +70,10 @@ class CircuitSearch:
 
         self.n_success_measurements = n_success_measurements
 
-        # # Init indices for flexible slicing
-        # self._start_idx_rz_angles = 0
-        # self._start_idx_ry_angles = 2 * self.depth
-        # self._start_idx_modes = 3 * self.depth
-        # self._start_idx_ancilla_state_in = 5 * self.depth
-        # self._start_idx_ancilla_state_out = 5 * self.depth + self.n_ancilla_photons
-
-    #     self._precompute_matrices()
-    #
-    # def _precompute_matrices(self):
-    #     self._construct_permutation_matrix()
-    #     self._construct_normalization_matrix(self._permutation_matrix)
-    #
-    # def _construct_permutation_matrix(self):
-    #     """
-    #     The matrix for output state computing.
-    #     Multiply by it state vector to sum up all like terms.
-    #     For example, vector (a0 * a1 + a1 * a0) will become 2 * a0 * a1
-    #     """
-    #     # TODO: возможно через reshape без to_idx ?
-    #     def to_idx(*modes):
-    #         """Convert multi-dimensional index to one-dimensional."""
-    #         res = 0
-    #         for mode in modes:
-    #             res = res * self.n_modes + mode
-    #         return res
-    #
-    #     args = [list(range(self.n_modes))] * self.n_photons
-    #     indices = [list(i) for i in product(*args)]
-    #
-    #     normalized_indices = [idx.copy() for idx in indices]
-    #     for idx in normalized_indices:
-    #         idx.sort()
-    #
-    #     all_indices = list(map(lambda x, y: [to_idx(*x), to_idx(*y)], normalized_indices, indices))
-    #     vals = [1.] * len(all_indices)
-    #
-    #     self._permutation_matrix = torch.sparse_coo_tensor(torch.tensor(all_indices).t(), vals, device=self.device,
-    #                                                        dtype=torch.complex64)
-    #
-    # def _construct_normalization_matrix(self, permutation_matrix):
-    #     """
-    #     Get matrices for transforming between two representations of state: Dirac form and operator form.
-    #     It's considered that operator acts on the vacuum state.
-    #
-    #         First matrix:  Dirac    -> operator ( |n> -> a^n / sqrt(n!) )
-    #
-    #         Second matrix: operator -> Dirac    ( a^n -> sqrt(n!) * |n> )
-    #     """
-    #     vector = torch.ones(permutation_matrix.shape[1], 1, device=self.device, dtype=torch.complex64)
-    #     vector = torch.sparse.mm(permutation_matrix, vector).to_sparse_coo()
-    #
-    #     indices = vector.indices()[0].reshape(1, -1)
-    #     indices = torch.cat((indices, indices))
-    #     c = factorial(self.n_photons)
-    #
-    #     self._normalization_matrix = torch.sparse_coo_tensor(indices, (vector.values() / c).sqrt(),
-    #                                                          size=permutation_matrix.shape, device=self.device)
-    #     self._inverted_normalization_matrix = torch.sparse_coo_tensor(indices, (c / vector.values()).sqrt(),
-    #                                                                   size=permutation_matrix.shape,
-    #                                                                   device=self.device)
-
     def __calculate_fidelity_and_probability(self, transforms):
         """Given transforms, get fidelity and probability for each one."""
         if self.n_success_measurements == 1:
             # Probabilities
-            # TODO: изменить формулу ?
             dot = torch.abs(transforms.mul(transforms.conj()))  # TODO: Optimize ?
             prob_per_state = torch.sum(dot, 2)
             probabilities = prob_per_state.sum(-1) / self.n_input_basic_states
@@ -179,8 +113,8 @@ class CircuitSearch:
         fidelities, probabilities = self.__get_fidelity_and_probability(population)
         return torch.where(fidelities > 0.999, 100. * probabilities, fidelities)
 
-    def run(self, min_probability, n_generations, n_offsprings, n_elite,
-            source_file=None, result_file=None):
+    def run(self, min_probability, n_generations, n_offsprings, n_elite, mutation_probability=0.1,
+            source_file=None, result_file=None, loqc_tech_file=None):
         """
         Launch search. The algorithm stops in one of these cases:
             * After `n_generations` generations
@@ -196,11 +130,14 @@ class CircuitSearch:
             n_elite: Number of individuals with the best fitness, that are guaranteed to pass into the next
             generation.
 
+            mutation_probability: Probability of the given gene to slightly change its value after crossover.
+
             source_file: The file to read initial population. If is None, then random population is generated.
 
             result_file: The file to write the result population to. If is None, the data won't be written anywhere.
 
-            ptype: Population type (universal or real).
+            loqc_tech_file: The file to write the best circuit as scheme for site loqc.tech. If is None, the data won't
+                be written anywhere.
         """
         n_population = n_elite + n_offsprings
         # Save start time
@@ -236,22 +173,14 @@ class CircuitSearch:
             parents, fitness = population.select(fitness, n_elite)
 
             # Create new generation
-            # parents.mutate(0.5)
-            # population = parents
-
             children = parents.crossover(n_offsprings)
-            children.mutate(mutation_probability=0.1)
+            children.mutate(mutation_probability=mutation_probability)
             population = parents + children
-
-            # population = parents + parents.crossover(n_offsprings)
-            # population.mutate(mutation_probability=0.5)
 
             # Calculate fitness for the new individuals
             fitness = self.__calculate_fitness(population)
 
-            # print("Generation:", i + 1)
             best_fitness = fitness.max().item()
-            # print("Best fitness:", best_fitness)
             print_progress_bar(best_fitness, length=40, percentage=(i + 1.) / n_generations, reprint=True)
 
             # If circuit with high enough fitness is found, stop
@@ -269,8 +198,9 @@ class CircuitSearch:
 
         # Print result info
         print("Circuit:")
-        best[0].to_loqc_tech("result")
-        # best[0].print()
+        if loqc_tech_file:
+            best[0].to_loqc_tech(loqc_tech_file)
+        best[0].print()
         f, p = self.__get_fidelity_and_probability(best)
         print("Fidelity: ", f[0].item())
         print("Probability: ", p[0].item())

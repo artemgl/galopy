@@ -13,29 +13,31 @@ class Circuit:
         self.initial_ancilla_state = initial_ancilla_state.cpu().numpy()
         self.measurements = measurements.cpu().numpy()
 
-    # def print(self):
-    #     angles = self.bs_angles.reshape(-1).tolist()
-    #     angles = [f"{180. * angle / pi:.2f}" for angle in angles]
-    #
-    #     topology = self.topology.tolist()
-    #     topology = [f"{sublist[0]}, {sublist[1]}" for sublist in topology]
-    #
-    #     elements = pd.DataFrame({'Element': ['Beam splitter'] * self.topology.shape[0],
-    #                              'Angles': angles,
-    #                              'Modes': topology})
-    #
-    #     if self.initial_ancilla_state.size > 0:
-    #         modes_in = self.initial_ancilla_state.reshape(-1)
-    #         # TODO: print all the measurements
-    #         modes_out = self.measurements[0]
-    #
-    #         ancillas = pd.DataFrame({'Mode in': modes_in,
-    #                                  'Mode out': modes_out})
-    #         ancillas.index.name = 'Ancilla photon'
-    #
-    #         print(elements, ancillas, sep='\n')
-    #     else:
-    #         print(elements)
+    def print(self):
+        angles = [f"{180. * angle[0] / pi:.2f} {180. * angle[1] / pi:.2f}" for angle in self.bs_angles.tolist()] +\
+                 [f"{180. * angle / pi:.2f}" for angle in self.ps_angles.tolist()]
+
+        topology = self.topology.tolist()
+        topology = [f"{sublist[0]}, {sublist[1]}" for sublist in topology] +\
+                   [f"{i}" for i in range(self.n_modes)]
+
+        elements = pd.DataFrame({'Element': ['Beam splitter'] * self.bs_angles.shape[0] +
+                                            ['Phase shifter'] * self.ps_angles.shape[0],
+                                 'Angles': angles,
+                                 'Modes': topology})
+
+        if self.initial_ancilla_state.size > 0:
+            modes_in = self.initial_ancilla_state.reshape(-1)
+            # TODO: print all the measurements
+            modes_out = self.measurements[0]
+
+            ancillas = pd.DataFrame({'Mode in': modes_in,
+                                     'Mode out': modes_out})
+            ancillas.index.name = 'Ancilla photon'
+
+            print(elements, ancillas, sep='\n')
+        else:
+            print(elements)
 
     def to_loqc_tech(self, filename):
         photon_sources = []
@@ -70,7 +72,6 @@ class Circuit:
                 counter += 1
                 continue
 
-            # id = "bs" + str(i) + "_" + str(j) + "_" + str(counter)
             id = "bs" + str(counter)
             beam_splitter = {
                 "id": id,
