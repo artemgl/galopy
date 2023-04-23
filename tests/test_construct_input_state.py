@@ -14,19 +14,36 @@ class ConstructState(unittest.TestCase):
     def test(self):
         random.seed()
         for i in range(self._max_test):
-            search = gen_random_search('cpu', self._max_depth, self._max_states, self._max_modes, self._max_photons)
-            depth = search.depth
-            n_ancilla_photons = search.n_ancilla_photons
-            n_modes = search.n_modes
-            basic_states = search.input_basic_states
-            n_states = basic_states.shape[0]
+            depth = random.randint(1, self._max_depth)
 
-            n_parents = random.randint(1, self._max_population)
-            population = search._CircuitSearch__gen_random_population(n_parents)
-            actuals = search._CircuitSearch__construct_state(population)
+            n_photons = random.randint(1, self._max_photons)
+            n_state_photons = random.randint(1, n_photons)
+            n_ancilla_photons = n_photons - n_state_photons
 
-            for j in range(n_parents):
-                common_index = population[j, 5 * depth:5 * depth + n_ancilla_photons].numpy().tolist()
+            n_state_modes = random.randint(1, self._max_modes)
+            n_states = random.randint(1, min(n_state_modes ** n_state_photons, self._max_states))
+
+            basic_states = gen_random_states(n_state_modes, n_state_photons, n_states)
+            basic_states = torch.tensor(basic_states)
+
+            n_ancilla_modes = random.randint(0, self._max_modes - n_state_modes)
+            n_modes = n_state_modes + n_ancilla_modes
+
+            if n_ancilla_modes == 0 and n_ancilla_photons > 0:
+                n_photons -= n_ancilla_photons
+                n_ancilla_photons = 0
+
+            n_population = random.randint(1, self._max_population)
+
+            population = RandomPopulation(n_individuals=n_population, depth=depth, n_modes=n_modes,
+                                          n_ancilla_modes=n_ancilla_modes, n_state_photons=n_state_photons,
+                                          n_ancilla_photons=n_ancilla_photons, n_success_measurements=1, device='cpu')
+
+            actuals = population._construct_input_state(basic_states)
+
+            for j in range(n_population):
+                circuit = population[j]
+                common_index = circuit.initial_ancilla_states.tolist()
 
                 for k in range(n_states):
                     actual = actuals[j, k].coalesce()

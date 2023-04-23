@@ -27,6 +27,8 @@ class Population:
         self.initial_ancilla_states = initial_ancilla_state
         self.measurements = measurements
 
+        self._normalize_data()
+
     def get_parameters(self):
         return (
             self.n_modes,
@@ -413,8 +415,10 @@ class Population:
         bs_angles = self.bs_angles[item, ...]
         ps_angles = self.ps_angles[item, ...]
         topologies = self.topologies[item, ...]
-        initial_ancilla_states = self.initial_ancilla_states[item, ...]
-        measurements = self.measurements[item, ...]
+        initial_ancilla_states = self.initial_ancilla_states[item, ...] if self.n_ancilla_photons > 0\
+            else torch.tensor([])
+        measurements = self.measurements[item, ...] if self.n_ancilla_photons > 0\
+            else torch.tensor([])
 
         if isinstance(item, int):
             result = Circuit(self.n_modes, self.n_modes - self.n_ancilla_modes, bs_angles, ps_angles, topologies,
