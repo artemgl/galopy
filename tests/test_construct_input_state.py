@@ -2,7 +2,7 @@ import unittest
 from tests.utils import *
 
 
-class ConstructState(unittest.TestCase):
+class ConstructInputState(unittest.TestCase):
 
     _max_depth = 10
     _max_states = 5

@@ -1,6 +1,5 @@
 import torch
 from time import time
-from galopy.progress_bar import print_progress_bar
 from galopy.population import RandomPopulation, FromFilePopulation
 
 
@@ -139,6 +138,16 @@ class CircuitSearch:
             loqc_tech_file: The file to write the best circuit as scheme for site loqc.tech. If is None, the data won't
                 be written anywhere.
         """
+
+        def print_progress_bar(best_fitness, length=10, percentage=0., reprint=False):
+            filled = int(length * percentage)
+            s = "|" + "█" * filled + " " * (
+                        length - filled) + f"| {100. * percentage:.2f}%" + f"  Best fitness: {best_fitness}"
+            if reprint:
+                s = "\r" + s
+
+            print(s, end='')
+
         n_population = n_elite + n_offsprings
         # Save start time
         start_time = time()
