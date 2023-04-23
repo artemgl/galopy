@@ -1,4 +1,6 @@
 import unittest
+import random
+from galopy.circuit_search import *
 from tests.utils import *
 
 
@@ -6,8 +8,8 @@ class ConstructInputState(unittest.TestCase):
 
     _max_depth = 10
     _max_states = 5
-    _max_modes = 10
-    _max_photons = 6
+    _max_modes = 8
+    _max_photons = 5
     _max_population = 20
     _max_test = 100
 

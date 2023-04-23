@@ -1,7 +1,7 @@
 import unittest
-from tests.utils import *
 import random
-import numpy as np
+from tests.utils import *
+from galopy.circuit_search import *
 
 
 class ReadSchemeUnitary(unittest.TestCase):
