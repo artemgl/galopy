@@ -1,10 +1,25 @@
+![Conda](https://github.com/sysoevss/galopy/actions/workflows/python-package-conda.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 # galopy
 Implementation of genetic algorithm for linear optics quantum gates search
+
+# Older version (too slow, not recomended)
 
 0. I use PyGAD (pip install pygad)
 1. Set the search constants to feet your taste directly in galo.py (see below).
 2. python galo.py
 3. Observe the result!
+
+Initialization:
+
+depth - the number of linear optics gates in the circuit (gate is one of [I, BS, PS]) 
+
+ancillas - how many ancilla modes to add
+
+other constants - read the PyGAD guide : https://pygad.readthedocs.io/en/latest/README_pygad_ReadTheDocs.html
+
+# New version (thanks to Artem Chernikov) - severely optimized, added CUDA support
 
 # Basic example
 Search CZ gate with 3 beam splitters, 2 ancilla modes and 0 ancilla photons
@@ -58,15 +73,5 @@ Probability:  0.11715999245643616
 Processed 156 generations in 11.00 seconds
 ```
 
-#  Initialization here!
 
-depth - the number of linear optics gates in the circuit (gate is one of [I, BS, PS]) 
-
-depth = 8
-
-ancillas - how many ancilla modes to add
-
-ancillas = 4
-
-other constants - read the PyGAD guide : https://pygad.readthedocs.io/en/latest/README_pygad_ReadTheDocs.html
 

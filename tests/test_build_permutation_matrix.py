@@ -1,6 +1,5 @@
 import unittest
 from galopy.circuit_search import *
-import numpy as np
 
 
 class BuildPermutationMatrix(unittest.TestCase):
@@ -8,10 +7,11 @@ class BuildPermutationMatrix(unittest.TestCase):
         expected = torch.tensor([[1., 0., 0., 0.],
                                  [0., 1., 1., 0.],
                                  [0., 0., 0., 0.],
-                                 [0., 0., 0., 1.]], requires_grad=False)
+                                 [0., 0., 0., 1.]])
 
-        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=1)
-        actual = search._CircuitSearch__build_permutation_matrix()
+        population = RandomPopulation(n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=1, n_state_photons=2,
+                                      n_ancilla_photons=0, n_success_measurements=1, device='cpu')
+        actual = population._permutation_matrix
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
@@ -27,8 +27,9 @@ class BuildPermutationMatrix(unittest.TestCase):
                                  [0., 0., 0., 0., 0., 0., 0., 0., 0.],
                                  [0., 0., 0., 0., 0., 0., 0., 0., 1.]], requires_grad=False)
 
-        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=2, n_ancilla_photons=1)
-        actual = search._CircuitSearch__build_permutation_matrix()
+        population = RandomPopulation(n_individuals=1, depth=1, n_modes=3, n_ancilla_modes=0, n_state_photons=2,
+                                      n_ancilla_photons=0, n_success_measurements=1, device='cpu')
+        actual = population._permutation_matrix
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
@@ -43,8 +44,9 @@ class BuildPermutationMatrix(unittest.TestCase):
                                  [0., 0., 0., 0., 0., 0., 0., 0.],
                                  [0., 0., 0., 0., 0., 0., 0., 1.]], requires_grad=False)
 
-        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=2)
-        actual = search._CircuitSearch__build_permutation_matrix()
+        population = RandomPopulation(n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=0, n_state_photons=3,
+                                      n_ancilla_photons=0, n_success_measurements=1, device='cpu')
+        actual = population._permutation_matrix
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
