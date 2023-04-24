@@ -1,3 +1,5 @@
+![Conda](https://github.com/sysoevss/galopy/actions/workflows/python-package-conda.yml/badge.svg)
+
 # galopy
 Implementation of genetic algorithm for linear optics quantum gates search
 
