@@ -1,5 +1,6 @@
 import unittest
 from math import sqrt
+import sys
 
 sys.path.append('../')
 from galopy.circuit_search import *
