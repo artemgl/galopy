@@ -1,9 +1,7 @@
 import unittest
 from math import sqrt
-import sys
-
-sys.path.append('../')
 from galopy.circuit_search import *
+
 
 class BuildNormalizationMatrix(unittest.TestCase):
     def test1(self):
