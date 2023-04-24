@@ -1,7 +1,7 @@
-from galopy.lonet import *
+from galopy.gd.lonet import *
 import torch
 import numpy as np
-from math import pi, sqrt, cos, sin
+from math import pi, sqrt
 import matplotlib.pyplot as plt
 import copy
 

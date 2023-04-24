@@ -1,8 +1,5 @@
 import numpy as np
-import torch
-from galopy.lonet import LoNet
-from math import ceil, log
-
+from galopy.gd.lonet import LoNet
 
 if __name__ == '__main__':
     target_matrix = np.array([[1., 0., 0., 0.],

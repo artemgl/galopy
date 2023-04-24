@@ -1,7 +1,7 @@
 import torch
 from itertools import product
 from math import factorial, pi
-import galopy.topology as tl
+import galopy.gd.topology as tl
 import json
 
 

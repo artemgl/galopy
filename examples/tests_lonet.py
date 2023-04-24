@@ -1,10 +1,10 @@
-from galopy.lonet import *
+from galopy.gd.lonet import *
 import torch
 import numpy as np
-from math import pi, sqrt, cos, sin, ceil, log
+from math import pi, ceil, log
 import matplotlib.pyplot as plt
 import copy
-import galopy.topology as tl
+import galopy.gd.topology as tl
 
 
 def parallel_topology(n_modes):
