@@ -1,7 +1,7 @@
 import unittest
-from tests.utils import *
 import random
-import numpy as np
+from tests.utils import *
+from galopy.circuit_search import *
 
 
 class ReadSchemeUnitary(unittest.TestCase):
@@ -15,16 +15,23 @@ class ReadSchemeUnitary(unittest.TestCase):
         random.seed()
         for i in range(self._max_test):
             depth = random.randint(1, self._max_depth)
-            n_parents = random.randint(1, self._max_population)
 
-            basic_states = np.random.randint(0, self._max_modes, size=(1, 1))
-            n_modes = basic_states.max() + 1
+            n_state_photons = 1
+            n_ancilla_photons = 0
 
-            search = CircuitSearch('cpu', np.array([[1.]]), basic_states, depth=depth)
-            population = search._CircuitSearch__gen_random_population(n_parents)
-            actuals = search._CircuitSearch__read_scheme_unitary(population)
+            n_state_modes = random.randint(1, self._max_modes)
+            n_ancilla_modes = random.randint(0, self._max_modes - n_state_modes)
+            n_modes = n_state_modes + n_ancilla_modes
 
-            for j in range(n_parents):
+            n_population = random.randint(1, self._max_population)
+
+            population = RandomPopulation(n_individuals=n_population, depth=depth, n_modes=n_modes,
+                                          n_ancilla_modes=n_ancilla_modes, n_state_photons=n_state_photons,
+                                          n_ancilla_photons=n_ancilla_photons, n_success_measurements=1, device='cpu')
+
+            actuals = population._read_scheme_unitary()
+
+            for j in range(n_population):
                 actual = actuals[j]
                 expected = construct_circuit_matrix(population[j], n_modes, depth)
                 expected = np.array(expected)

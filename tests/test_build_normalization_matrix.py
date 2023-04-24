@@ -1,7 +1,6 @@
 import unittest
 from galopy.circuit_search import *
 from math import sqrt
-import numpy as np
 
 
 class BuildNormalizationMatrix(unittest.TestCase):
@@ -16,9 +15,10 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0., 0., 0.,        0.],
                                      [      0., 0., 0., sqrt(2.)]], requires_grad=False)
 
-        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=1)
-        actual, actual_inv = search._CircuitSearch__build_normalization_matrix(
-            search._CircuitSearch__build_permutation_matrix())
+        population = RandomPopulation(n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=1, n_state_photons=2,
+                                      n_ancilla_photons=0, n_success_measurements=1, device='cpu')
+        actual = population._normalization_matrix
+        actual_inv = population._inverted_normalization_matrix
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
@@ -48,9 +48,10 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0., 0., 0., 0.,       0., 0., 0., 0.,       0.],
                                      [      0., 0., 0., 0.,       0., 0., 0., 0., sqrt(2.)]], requires_grad=False)
 
-        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=2, n_ancilla_photons=1)
-        actual, actual_inv = search._CircuitSearch__build_normalization_matrix(
-            search._CircuitSearch__build_permutation_matrix())
+        population = RandomPopulation(n_individuals=1, depth=1, n_modes=3, n_ancilla_modes=0, n_state_photons=2,
+                                      n_ancilla_photons=0, n_success_measurements=1, device='cpu')
+        actual = population._normalization_matrix
+        actual_inv = population._inverted_normalization_matrix
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
@@ -78,9 +79,10 @@ class BuildNormalizationMatrix(unittest.TestCase):
                                      [      0.,       0., 0.,       0., 0., 0., 0.,       0.],
                                      [      0.,       0., 0.,       0., 0., 0., 0., sqrt(6.)]], requires_grad=False)
 
-        search = CircuitSearch('cpu', np.array([[1.]]), np.array([[0]]), n_ancilla_modes=1, n_ancilla_photons=2)
-        actual, actual_inv = search._CircuitSearch__build_normalization_matrix(
-            search._CircuitSearch__build_permutation_matrix())
+        population = RandomPopulation(n_individuals=1, depth=1, n_modes=2, n_ancilla_modes=0, n_state_photons=3,
+                                      n_ancilla_photons=0, n_success_measurements=1, device='cpu')
+        actual = population._normalization_matrix
+        actual_inv = population._inverted_normalization_matrix
 
         self.assertEqual(expected.shape, actual.shape)
         self.assertSequenceEqual(expected.numpy().tolist(), actual.to_dense().numpy().tolist())
