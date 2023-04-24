@@ -1,4 +1,5 @@
 ![Conda](https://github.com/sysoevss/galopy/actions/workflows/python-package-conda.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # galopy
 Implementation of genetic algorithm for linear optics quantum gates search
