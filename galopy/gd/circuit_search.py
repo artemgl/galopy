@@ -9,6 +9,25 @@ import copy
 class CircuitSearch(torch.nn.Module):
     def __init__(self, matrix, input_basic_states, output_basic_states=None, n_ancilla_modes=0, topology=None,
                  ancilla_state=None, measurements=None, device='cpu'):
+        """
+        Gradient descent searching a circuit.
+        Parameters:
+            matrix: Matrix representing the desired transform.
+
+            input_basic_states: Basic states on which transform is performed.
+
+            output_basic_states: Basic states which are counted as output.
+
+            n_ancilla_modes: Number of modes in which ancilla photons are.
+
+            topology: Topology (an arrangement of beam splitters) to be used.
+
+            ancilla_state: Initial state of ancilla photons.
+
+            measurements: Expected measurements in ancilla modes.
+
+            device: The device on which you want to store data and perform calculations (e.g. 'cuda').
+        """
         super().__init__()
 
         self.device = device
@@ -270,6 +289,21 @@ class CircuitSearch(torch.nn.Module):
         return ((f - p) * (1. + torch.sign(p - p_min)) + 2. * p).max()
 
     def run(self, min_probability, n_epochs, print_info=True):
+        """
+        Launch search. The algorithm stops in one of these cases:
+            * After `n_epochs` epochs
+            * If the circuit with fidelity > 0.999 and probability > `min_probability` is found
+
+        Parameters:
+            min_probability: Minimum required probability of the gate.
+
+            n_epochs: Maximum number of epochs to happen.
+
+            print_info: Whether information printing is needed.
+
+        Returns:
+            The best circuit found by the algorithm.
+        """
         def print_progress_bar(best_f, best_p, length=40, percentage=0., reprint=False):
             filled = int(length * percentage)
             s = "|" + "█" * filled + " " * (length - filled) + f"| {100. * percentage:.2f}%" +\

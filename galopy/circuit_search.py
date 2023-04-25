@@ -7,7 +7,7 @@ class CircuitSearch:
     def __init__(self, device: str, matrix, input_basic_states, output_basic_states=None, depth=1,
                  n_ancilla_modes=0, n_ancilla_photons=0, n_success_measurements=1):
         """
-        Algorithm searching a circuit.
+        Genetic algorithm searching a circuit.
         Parameters:
             device: The device on which you want to store data and perform calculations (e.g. 'cuda').
 
@@ -136,6 +136,9 @@ class CircuitSearch:
             result_file: The file to write the result population to. If is None, the data won't be written anywhere.
 
             print_info: Whether information printing is needed.
+
+        Returns:
+            The best circuit found by the algorithm.
         """
 
         def print_progress_bar(best_fitness, length=40, percentage=0., reprint=False):
