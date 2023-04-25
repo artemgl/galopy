@@ -1,3 +1,3 @@
-from circuit import *
-from population import *
-from circuit_search import *
+from galopy.circuit import *
+from galopy.population import *
+from galopy.circuit_search import *

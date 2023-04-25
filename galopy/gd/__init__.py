@@ -1,2 +1,2 @@
-from circuit_search import *
-from topology import *
+from galopy.gd.circuit_search import *
+from galopy.gd.topology import *
