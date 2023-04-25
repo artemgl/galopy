@@ -1,6 +1,6 @@
 import numpy as np
 from math import sqrt
-from galopy.circuit_search import *
+from galopy import *
 
 if __name__ == "__main__":
     # Initialize parameters
@@ -24,4 +24,7 @@ if __name__ == "__main__":
     search = CircuitSearch('cpu', matrix, input_basic_states=basic_states, depth=3,
                            n_ancilla_modes=0, n_ancilla_photons=0)
     # Launch the search!
-    search.run(min_probability, n_generations, n_offsprings, n_elite)
+    circuit = search.run(min_probability, n_generations, n_offsprings, n_elite)
+
+    # Save result
+    circuit.to_loqc_tech("result.json")

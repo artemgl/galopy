@@ -2,7 +2,7 @@ import torch
 from math import tau, pi, factorial
 import json
 from itertools import product
-from galopy.circuit import Circuit
+from galopy import Circuit
 
 
 class Population:
@@ -416,9 +416,9 @@ class Population:
         ps_angles = self.ps_angles[item, ...]
         topologies = self.topologies[item, ...]
         initial_ancilla_states = self.initial_ancilla_states[item, ...] if self.n_ancilla_photons > 0\
-            else torch.tensor([])
+            else torch.tensor([[]])
         measurements = self.measurements[item, ...] if self.n_ancilla_photons > 0\
-            else torch.tensor([])
+            else torch.tensor([[]])
 
         if isinstance(item, int):
             result = Circuit(self.n_modes, self.n_modes - self.n_ancilla_modes, bs_angles, ps_angles, topologies,

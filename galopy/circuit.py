@@ -4,13 +4,13 @@ import json
 
 
 class Circuit:
-    def __init__(self, n_modes, n_state_modes, bs_angles, ps_angles, topology, initial_ancilla_states, measurements):
+    def __init__(self, n_modes, n_state_modes, bs_angles, ps_angles, topology, initial_ancilla_state, measurements):
         self.n_state_modes = n_state_modes
         self.n_modes = n_modes
         self.bs_angles = bs_angles.cpu().numpy()
         self.ps_angles = ps_angles.cpu().numpy()
         self.topology = topology.cpu().numpy()
-        self.initial_ancilla_states = initial_ancilla_states.cpu().numpy()
+        self.initial_ancilla_state = initial_ancilla_state.cpu().numpy()
         self.measurements = measurements.cpu().numpy()
 
     def print(self):
@@ -26,8 +26,8 @@ class Circuit:
                                  'Angles': angles,
                                  'Modes': topology})
 
-        if self.initial_ancilla_states.size > 0:
-            modes_in = self.initial_ancilla_states.reshape(-1)
+        if self.initial_ancilla_state.size > 0:
+            modes_in = self.initial_ancilla_state.reshape(-1)
             # TODO: print all the measurements
             modes_out = self.measurements[0]
 
@@ -170,8 +170,8 @@ class Circuit:
         n_ancilla_modes = self.n_modes - self.n_state_modes
 
         ancillas_in = [0] * n_ancilla_modes
-        if self.initial_ancilla_states.size > 0:
-            ancilla_state = self.initial_ancilla_states.reshape(-1)
+        if self.initial_ancilla_state.size > 0:
+            ancilla_state = self.initial_ancilla_state.reshape(-1)
             for i in ancilla_state:
                 ancillas_in[i] += 1
         for i in range(n_ancilla_modes):
@@ -179,7 +179,7 @@ class Circuit:
 
         ancillas_out = [0] * n_ancilla_modes
         if self.measurements.size > 0:
-            measurements = self.measurements.reshape(-1, self.initial_ancilla_states.size)
+            measurements = self.measurements.reshape(-1, self.initial_ancilla_state.size)
             for i in measurements[0]:
                 ancillas_out[i] += 1
         for i in range(n_ancilla_modes):
