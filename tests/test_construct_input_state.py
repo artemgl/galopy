@@ -1,6 +1,6 @@
 import unittest
 import random
-from galopy.circuit_search import *
+from galopy import *
 from tests.utils import *
 
 

@@ -1,6 +1,6 @@
 import unittest
 from math import sqrt
-from galopy.circuit_search import *
+from galopy import *
 
 
 class BuildNormalizationMatrix(unittest.TestCase):

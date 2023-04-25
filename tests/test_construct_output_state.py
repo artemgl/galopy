@@ -1,7 +1,7 @@
 from math import sqrt, factorial
 import unittest
 import random
-from galopy.circuit_search import *
+from galopy import *
 from tests.utils import *
 
 

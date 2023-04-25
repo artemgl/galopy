@@ -1,5 +1,5 @@
 import unittest
-from galopy.circuit_search import *
+from galopy import *
 
 
 class BuildPermutationMatrix(unittest.TestCase):
