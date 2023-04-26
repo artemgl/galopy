@@ -45,7 +45,7 @@ class ConstructInputState(unittest.TestCase):
 
             for j in range(n_population):
                 circuit = population[j]
-                common_index = circuit.initial_ancilla_states.tolist()
+                common_index = circuit.initial_ancilla_state.tolist()
 
                 for k in range(n_states):
                     actual = actuals[j, k].coalesce()
