@@ -418,9 +418,12 @@ class Population:
         initial_ancilla_states = self.initial_ancilla_states[item, ...] if self.n_ancilla_photons > 0\
             else torch.tensor([[]])
         measurements = self.measurements[item, ...] if self.n_ancilla_photons > 0\
-            else torch.tensor([[]])
+            else torch.tensor([[[]]])
 
         if isinstance(item, int):
+            if not self.n_ancilla_photons > 0:
+                initial_ancilla_states = initial_ancilla_states[0]
+                measurements = measurements[0]
             result = Circuit(self.n_modes, self.n_modes - self.n_ancilla_modes, bs_angles, ps_angles, topologies,
                              initial_ancilla_states, measurements)
         else:
