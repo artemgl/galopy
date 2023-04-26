@@ -82,7 +82,7 @@ class ConstructOutputState(unittest.TestCase):
                                         .format(actual=actual_value, expected=expected_value,
                                                 bs_angles=circuit.bs_angles, ps_angles=circuit.ps_angles,
                                                 topology=circuit.topology,
-                                                initial_ancilla_states=circuit.initial_ancilla_states,
+                                                initial_ancilla_states=circuit.initial_ancilla_state,
                                                 basic_states=basic_states))
 
 
