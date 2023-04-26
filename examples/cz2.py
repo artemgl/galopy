@@ -1,12 +1,12 @@
 import numpy as np
-from galopy.circuit_search import *
+from galopy import *
 
 if __name__ == "__main__":
     # Initialize parameters
-    min_probability = 1. / 16.
+    min_probability = 2 / 27
     n_offsprings = 400
     n_elite = 200
-    n_generations = 100
+    n_generations = 1000
 
     # Gate represented as a matrix
     matrix = np.array([[1., 0., 0., 0.],
@@ -43,4 +43,7 @@ if __name__ == "__main__":
                            output_basic_states=output_basic_states, depth=8,
                            n_ancilla_modes=4, n_ancilla_photons=2)
     # Launch the search!
-    search.run(min_probability, n_generations, n_offsprings, n_elite)
+    circuit = search.run(min_probability, n_generations, n_offsprings, n_elite)
+
+    # Save result
+    circuit.to_loqc_tech("result.json")

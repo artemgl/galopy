@@ -1,7 +1,7 @@
 from math import sqrt, factorial
 import unittest
 import random
-from galopy.circuit_search import *
+from galopy import *
 from tests.utils import *
 
 
@@ -47,7 +47,7 @@ class ConstructOutputState(unittest.TestCase):
 
             for j in range(n_population):
                 circuit = population[j]
-                common_index = circuit.initial_ancilla_states.tolist()
+                common_index = circuit.initial_ancilla_state.tolist()
                 for n in range(n_states):
                     actual = actuals[j, n].coalesce()
                     actual_indices = actual.indices()[:-1].t()

@@ -1,13 +1,13 @@
 import torch
 from time import time
-from galopy.population import RandomPopulation, FromFilePopulation
+from galopy import RandomPopulation, FromFilePopulation
 
 
 class CircuitSearch:
     def __init__(self, device: str, matrix, input_basic_states, output_basic_states=None, depth=1,
                  n_ancilla_modes=0, n_ancilla_photons=0, n_success_measurements=1):
         """
-        Algorithm searching a circuit.
+        Genetic algorithm searching a circuit.
         Parameters:
             device: The device on which you want to store data and perform calculations (e.g. 'cuda').
 
@@ -65,7 +65,7 @@ class CircuitSearch:
         self.n_state_photons = input_basic_states.shape[1]
         self.n_ancilla_photons = n_ancilla_photons
         # Total number of photons
-        self.n_photons = input_basic_states.shape[1] + n_ancilla_photons
+        self.n_photons = self.n_state_photons + n_ancilla_photons
 
         self.n_success_measurements = n_success_measurements
 
@@ -113,7 +113,7 @@ class CircuitSearch:
         return torch.where(fidelities > 0.999, 100. * probabilities, fidelities)
 
     def run(self, min_probability, n_generations, n_offsprings, n_elite, mutation_probability=0.1,
-            source_file=None, result_file=None, loqc_tech_file=None):
+            source_file=None, result_file=None, print_info=True):
         """
         Launch search. The algorithm stops in one of these cases:
             * After `n_generations` generations
@@ -135,18 +135,21 @@ class CircuitSearch:
 
             result_file: The file to write the result population to. If is None, the data won't be written anywhere.
 
-            loqc_tech_file: The file to write the best circuit as scheme for site loqc.tech. If is None, the data won't
-                be written anywhere.
+            print_info: Whether information printing is needed.
+
+        Returns:
+            The best circuit found by the algorithm.
         """
 
-        def print_progress_bar(best_fitness, length=10, percentage=0., reprint=False):
+        def print_progress_bar(best_fitness, length=40, percentage=0., reprint=False):
             filled = int(length * percentage)
             s = "|" + "█" * filled + " " * (
                         length - filled) + f"| {100. * percentage:.2f}%" + f"  Best fitness: {best_fitness}"
             if reprint:
                 s = "\r" + s
 
-            print(s, end='')
+            if print_info:
+                print(s, end='')
 
         n_population = n_elite + n_offsprings
         # Save start time
@@ -175,7 +178,7 @@ class CircuitSearch:
         # Calculate fitness for the initial population
         fitness = self.__calculate_fitness(population)
 
-        print_progress_bar(None, length=40, percentage=0.)
+        print_progress_bar(None, percentage=0.)
 
         for i in range(n_generations):
             # Select parents
@@ -190,13 +193,14 @@ class CircuitSearch:
             fitness = self.__calculate_fitness(population)
 
             best_fitness = fitness.max().item()
-            print_progress_bar(best_fitness, length=40, percentage=(i + 1.) / n_generations, reprint=True)
+            print_progress_bar(best_fitness, percentage=(i + 1.) / n_generations, reprint=True)
 
             # If circuit with high enough fitness is found, stop
             if best_fitness >= 100. * min_probability:
                 n_generations = i + 1
                 break
-        print()
+        if print_info:
+            print()
 
         # Save result population to file
         if result_file is not None:
@@ -204,13 +208,15 @@ class CircuitSearch:
 
         # Get the best circuit
         best, fitness = population.select(fitness, 1)
+        best_circuit = best[0]
 
-        # Print result info
-        print("Circuit:")
-        if loqc_tech_file:
-            best[0].to_loqc_tech(loqc_tech_file)
-        best[0].print()
-        f, p = self.__get_fidelity_and_probability(best)
-        print("Fidelity: ", f[0].item())
-        print("Probability: ", p[0].item())
-        print(f"Processed {n_generations} generations in {time() - start_time:.2f} seconds")
+        if print_info:
+            # Print result info
+            print("Circuit:")
+            best_circuit.print()
+            f, p = self.__get_fidelity_and_probability(best)
+            print("Fidelity: ", f[0].item())
+            print("Probability: ", p[0].item())
+            print(f"Processed {n_generations} generations in {time() - start_time:.2f} seconds")
+
+        return best_circuit
