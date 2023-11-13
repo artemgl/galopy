@@ -270,11 +270,11 @@ class CircuitSearch(torch.nn.Module):
 
         fidelities = (a + b) / self.n_input_basic_states / (self.n_input_basic_states + 1)
 
-        # The probability of gate is counted so to get real fidelity we should divide it to probability
-        pure_fidelities = fidelities / probabilities
-        pure_fidelities = torch.where(probabilities == 0, 0, pure_fidelities)
+        # # The probability of gate is counted so to get real fidelity we should divide it to probability
+        # pure_fidelities = fidelities / probabilities
+        # pure_fidelities = torch.where(probabilities == 0, 0, pure_fidelities)
 
-        return pure_fidelities, probabilities
+        return fidelities, probabilities
 
     def __get_fidelity_and_probability(self):
         """Get fidelity and probability for each measurement."""
@@ -283,10 +283,17 @@ class CircuitSearch(torch.nn.Module):
         return self.__calculate_fidelity_and_probability(transforms)
 
     def forward(self):
-        return self.__get_fidelity_and_probability()
+        fidelities, probabilities = self.__get_fidelity_and_probability()
+        f = fidelities.sum()
+        probability = probabilities.sum()
+
+        pure_fidelity = f / probability
+        pure_fidelity = torch.where(probability == 0, 0, pure_fidelity)
+
+        return pure_fidelity, probability
 
     def loss(self, f, p, p_min):
-        return ((f - p) * (1. + torch.sign(p - p_min)) + 2. * p).max()
+        return (f - p) * (1. + torch.sign(p - p_min)) + 2. * p
 
     def run(self, min_probability, n_epochs, print_info=True):
         """
@@ -307,8 +314,8 @@ class CircuitSearch(torch.nn.Module):
         def print_progress_bar(best_f, best_p, length=40, percentage=0., reprint=False):
             filled = int(length * percentage)
             s = "|" + "█" * filled + " " * (length - filled) + f"| {100. * percentage:.2f}%" +\
-                f"  Best fidelity: {100. * best_f[0]:.2f}%" +\
-                f"  Best probability: {100. * best_p[0]:.2f}%"
+                f"  Best fidelity: {100. * best_f:.2f}%" +\
+                f"  Best probability: {100. * best_p:.2f}%"
             if reprint:
                 s = "\r" + s
 
@@ -322,7 +329,7 @@ class CircuitSearch(torch.nn.Module):
         # best_p = best_p.data
 
         if print_info:
-            print_progress_bar(best_f.data.cpu().numpy().tolist(), best_p.data.cpu().numpy().tolist())
+            print_progress_bar(best_f.data.cpu().numpy(), best_p.data.cpu().numpy())
 
         optimizer = torch.optim.Adam(self.parameters(), lr=0.01, maximize=True)
 
@@ -354,9 +361,12 @@ class CircuitSearch(torch.nn.Module):
             optimizer.step()
 
             if print_info:
-                print_progress_bar(best_f.data.cpu().numpy().tolist(), best_p.data.cpu().numpy().tolist(),
+                print_progress_bar(best_f.data.cpu().numpy(), best_p.data.cpu().numpy(),
                                    percentage=(epoch_index + 1.) / n_epochs, reprint=True)
+
         if print_info:
+            print_progress_bar(best_f.data.cpu().numpy(), best_p.data.cpu().numpy(),
+                               percentage=1., reprint=True)
             print()
 
         return Circuit(self.n_modes, self.n_state_modes, best_circuit.bs_angles.weight.data.view(-1, 2),
