@@ -88,16 +88,32 @@ class CircuitSearch(torch.nn.Module):
         self.bs_angles = torch.nn.Linear(self.n_modes * (self.n_modes - 1), 1, bias=False, device=device)
         self.ps_angles = torch.nn.Linear(self.n_modes, 1, bias=False, device=device)
 
+        if self.n_measurements > 1:
+            self.corr_topology = topology(self.n_state_modes, device=device)
+
+            self.bs_corr_angles = torch.nn.Linear(self.n_measurements - 1,
+                                                  self.n_state_modes * (self.n_state_modes - 1),
+                                                  bias=False, device=device)
+            self.ps_corr_angles = torch.nn.Linear(self.n_measurements - 1,
+                                                  self.n_state_modes,
+                                                  bias=False, device=device)
+
         self.__precompute()
 
     def __precompute(self):
         """Compute auxiliary objects before run to optimize calculations."""
         # Precompute matrices
-        self._permutation_matrix = self.__build_permutation_matrix()
-        normalization_matrix, inverted_normalization_matrix = \
-            self.__build_normalization_matrix(self._permutation_matrix)
-        self._normalization_matrix = normalization_matrix
-        self._inverted_normalization_matrix = inverted_normalization_matrix
+        self._permutation_matrix = self.__build_permutation_matrix(self.n_modes, self.n_photons)
+        norm_matrix, inv_norm_matrix = self.__build_norm_matrix(self._permutation_matrix, self.n_photons)
+        self._norm_matrix = norm_matrix
+        self._inv_norm_matrix = inv_norm_matrix
+
+        if self.n_measurements > 1:
+            self._perm_corr_matrix = self.__build_permutation_matrix(self.n_state_modes, self.n_state_photons)
+            norm_corr_matrix, inv_norm_corr_matrix =\
+                self.__build_norm_matrix(self._permutation_matrix, self.n_state_photons)
+            self._norm_corr_matrix = norm_corr_matrix
+            self._inv_norm_corr_matrix = inv_norm_corr_matrix
 
         w = self.n_modes ** torch.arange(self.output_basic_states.shape[1] - 1, -1, -1, device=self.device)
         self.output_basic_states_packed = self.output_basic_states.float().matmul(w.float().reshape(-1, 1)).int()
@@ -109,7 +125,7 @@ class CircuitSearch(torch.nn.Module):
             self.measurements_packed = torch.tensor([], device=self.device)
 
     # TODO: возможно через reshape без to_idx ?
-    def __build_permutation_matrix(self):
+    def __build_permutation_matrix(self, n_modes, n_photons):
         """
         Create matrix for output state computing.
         Multiply by it state vector to sum up all like terms.
@@ -120,10 +136,10 @@ class CircuitSearch(torch.nn.Module):
             """Convert multi-dimensional index to one-dimensional."""
             res = 0
             for mode in modes:
-                res = res * self.n_modes + mode
+                res = res * n_modes + mode
             return res
 
-        args = [list(range(self.n_modes))] * self.n_photons
+        args = [list(range(n_modes))] * n_photons
         indices = [list(i) for i in product(*args)]
 
         normalized_indices = [idx.copy() for idx in indices]
@@ -136,7 +152,7 @@ class CircuitSearch(torch.nn.Module):
         return torch.sparse_coo_tensor(torch.tensor(all_indices).t(), vals, device=self.device,
                                        dtype=torch.complex64)
 
-    def __build_normalization_matrix(self, permutation_matrix):
+    def __build_norm_matrix(self, permutation_matrix, n_photons):
         """
         Create matrices for transforming between two representations of state: Dirac form and operator form.
         It's considered that operator acts on the vacuum state.
@@ -150,13 +166,57 @@ class CircuitSearch(torch.nn.Module):
 
         indices = vector.indices()[0].reshape(1, -1)
         indices = torch.cat((indices, indices))
-        c = factorial(self.n_photons)
+        c = factorial(n_photons)
         norm_mtx = torch.sparse_coo_tensor(indices, (vector.values() / c).sqrt(),
                                            size=permutation_matrix.shape, device=self.device)
         inv_norm_mtx = torch.sparse_coo_tensor(indices, (c / vector.values()).sqrt(),
                                                size=permutation_matrix.shape, device=self.device)
 
         return norm_mtx, inv_norm_mtx
+
+    def __correct_state(self, state_vectors):
+        """Correct the state after measurement."""
+        size_mtx = [self.n_measurements] + [1] * (self.n_state_photons - 1) + [self.n_state_modes] * 2
+        vectors_shape =\
+            [self.n_measurements] + [self.n_state_modes] * self.n_state_photons + [self.n_input_basic_states]
+
+        # Normalize (transform to operator form)
+        state_vectors = state_vectors.reshape(self.n_measurements * self.n_input_basic_states, -1)
+        state_vectors.t_()
+        state_vectors = torch.sparse.mm(self._norm_corr_matrix, state_vectors)
+        state_vectors.t_()
+        state_vectors = state_vectors.reshape(vectors_shape)
+
+        # Get unitary transforms
+        # TODO: Move calculations to gpu
+        unitaries = torch.zeros((self.n_measurements, self.n_state_modes, self.n_state_modes),
+                                device=self.device, dtype=torch.complex64)
+        unitaries[0] = torch.eye(self.n_state_modes, device=self.device, dtype=torch.complex64)
+        for i in range(1, self.n_measurements):
+            unitaries[i] = self.corr_topology.gen_unitary(self.bs_corr_angles.weight[i - 1].view(-1, 2),
+                                                          self.ps_corr_angles.weight[i - 1].view(-1))
+        unitaries = unitaries.reshape(*size_mtx)
+
+        # Apply unitaries to all photons in state
+        state_vectors = unitaries.matmul(state_vectors)
+        # TODO: matrix reshape instead of vector transposing ?
+        # TODO: Optimize? (Maybe firstly have sparse vector, then convert it to dense before some iteration)
+        for i in range(self.n_photons - 1):
+            state_vectors.transpose_(-3 - i, -2)
+            state_vectors = unitaries.matmul(state_vectors)
+            state_vectors.transpose_(-3 - i, -2)
+
+        state_vectors = state_vectors.reshape(self.n_measurements * self.n_input_basic_states, -1)
+        state_vectors.t_()
+        # TODO: Vector to sparse coo before multiplying
+        # Sum up indistinguishable states with precomputed permutation matrix
+        state_vectors = torch.sparse.mm(self._perm_corr_matrix, state_vectors)
+        # Transform to Dirac form
+        state_vectors = torch.sparse.mm(self._inv_norm_corr_matrix, state_vectors)
+        state_vectors.t_()
+        # state_vectors = state_vectors.reshape(vectors_shape)
+
+        return state_vectors
 
     def __construct_unitary(self):
         return self.topology.gen_unitary(self.bs_angles.weight.view(-1, 2), self.ps_angles.weight.view(-1))
@@ -201,7 +261,7 @@ class CircuitSearch(torch.nn.Module):
         # Normalize (transform to operator form)
         state_vector = state_vector.reshape(self.n_input_basic_states, -1)
         state_vector.t_()
-        state_vector = torch.sparse.mm(self._normalization_matrix, state_vector)
+        state_vector = torch.sparse.mm(self._norm_matrix, state_vector)
         state_vector.t_()
         state_vector = state_vector.reshape(vector_shape)
 
@@ -224,7 +284,7 @@ class CircuitSearch(torch.nn.Module):
         # Sum up indistinguishable states with precomputed permutation matrix
         state_vector = torch.sparse.mm(self._permutation_matrix, state_vector)
         # Transform to Dirac form
-        state_vector = torch.sparse.mm(self._inverted_normalization_matrix, state_vector)
+        state_vector = torch.sparse.mm(self._inv_norm_matrix, state_vector)
         state_vector.t_()
         state_vector = state_vector.reshape(vector_shape)
 
@@ -244,6 +304,8 @@ class CircuitSearch(torch.nn.Module):
 
         if self.n_measurements > 0:
             state_vector = state_vector[self.measurements_packed.view(-1).long(), ...]
+            if self.n_measurements > 1:
+                state_vector = self.__correct_state(state_vector)
 
         return state_vector[:, self.output_basic_states_packed.view(-1).long(), :]
 
