@@ -39,18 +39,21 @@ if __name__ == '__main__':
     # (1)----------
     # (0)----------
     ancilla_state = np.array([0, 1])
-    measurements = np.array([[0, 1]])
+    measurements = np.array([[0, 0],
+                             [0, 1],
+                             [1, 1]])
 
     # Create an instance of search
     search = CircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=2, measurements=measurements,
-                           ancilla_state=ancilla_state, output_basic_states=output_basic_states, topology=tl.Stable)
+                           ancilla_state=ancilla_state, output_basic_states=output_basic_states, topology=tl.Parallel,
+                           device='cuda')
 
     # Launch the search!
-    circuit = search.run(min_probability=2 / 27, n_epochs=1000)
+    circuit = search.run(min_probability=2 / 27, n_epochs=2000, print_info=True)
 
     # Print result
     print("Circuit:")
     circuit.print()
 
     # Save result
-    circuit.to_loqc_tech("result.json")
+    # circuit.to_loqc_tech("result.json")
