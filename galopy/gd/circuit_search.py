@@ -352,14 +352,14 @@ class CircuitSearch(torch.nn.Module):
 
         return fidelities, probabilities
 
-    def __get_fidelity_and_probability(self):
+    def _get_fidelity_and_probability(self):
         """Get fidelity and probability for each measurement."""
         state = self.__calculate_state()
         transforms = self.__construct_transforms(state)
         return self.__calculate_fidelity_and_probability(transforms)
 
     def forward(self):
-        fidelities, probabilities = self.__get_fidelity_and_probability()
+        fidelities, probabilities = self._get_fidelity_and_probability()
         f = fidelities.sum()
         probability = probabilities.sum()
 
