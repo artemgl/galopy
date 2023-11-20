@@ -53,16 +53,17 @@ if __name__ == '__main__':
     ancilla_state = np.array([0, 1])
     measurements = [
         np.array([[0, 1]]),
-        np.array([[0, 0]])
+        np.array([[0, 0],
+                  [1, 1]])
     ]
 
     # Create an instance of search
-    search = MultiCircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=3, measurements=measurements,
+    search = MultiCircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=2, measurements=measurements,
                                 ancilla_state=ancilla_state, output_basic_states=output_basic_states,
                                 topology=tl.Parallel, device='cpu')
 
     # Launch the search!
-    circuit = search.run(min_probability=2 / 27, n_epochs=2000, print_info=True)
+    circuit = search.run(min_probability=2 / 27, n_epochs=1000, print_info=True)
 
     # Print result
     print("Circuit:")

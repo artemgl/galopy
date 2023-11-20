@@ -323,7 +323,7 @@ class CircuitSearch(torch.nn.Module):
 
         return state_vector[:, self.output_basic_states_packed.view(-1).long(), :]
 
-    def __calculate_fidelity_and_probability(self, transforms):
+    def _calculate_fidelity_and_probability(self, transforms):
         """Given transforms, get fidelity and probability for each one."""
         # Probabilities
         dot = torch.abs(transforms.mul(transforms.conj()))  # TODO: Optimize ?
@@ -356,7 +356,7 @@ class CircuitSearch(torch.nn.Module):
         """Get fidelity and probability for each measurement."""
         state = self.__calculate_state()
         transforms = self.__construct_transforms(state)
-        return self.__calculate_fidelity_and_probability(transforms)
+        return self._calculate_fidelity_and_probability(transforms)
 
     def forward(self):
         fidelities, probabilities = self._get_fidelity_and_probability()

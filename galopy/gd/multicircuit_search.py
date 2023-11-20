@@ -31,10 +31,23 @@ class MultiCircuitSearch(CircuitSearch):
         super().__init__(matrices[0], input_basic_states, output_basic_states, n_ancilla_modes, topology, ancilla_state,
                          np.concatenate(measurements, axis=0), device)
 
-        self.matrices = matrices
-        self.measurements_list = measurements
+        self.matrices = [torch.tensor(m, device=self.device, dtype=torch.complex64) for m in matrices]
+        self.measurements_list = [torch.tensor(m, device=self.device, dtype=torch.complex64) for m in measurements]
 
-    def __calculate_fidelity_and_probability(self, transforms):
+        # # DEBUG
+        # from math import pi
+        # self.bs_angles.weight.data[:, :] = 0
+        # self.ps_angles.weight.data[:, :] = 0
+        # self.bs_corr_angles.weight.data[:, :] = 0
+        # self.ps_corr_angles.weight.data[:, :] = 0
+        # self.bs_angles.weight.data[0, 2] = pi / 4
+        # self.bs_angles.weight.data[0, 4] = pi / 3
+        # self.bs_angles.weight.data[0, 22] = -pi / 4
+        # self.bs_corr_angles.weight.data[0, 2] = -pi / 4
+        # self.bs_corr_angles.weight.data[1, 0] = pi / 4
+        # # DEBUG
+
+    def _calculate_fidelity_and_probability(self, transforms):
         """Given transforms, get fidelity and probability for each one."""
         fidelities = []
         probabilities = []
