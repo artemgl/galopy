@@ -1,13 +1,10 @@
 import numpy as np
-from galopy.gd import CircuitSearch
+from galopy.gd import CorrectionCircuitSearch
 import galopy.gd.topology as tl
+from anytree import AnyNode
 
 if __name__ == '__main__':
     # Gate represented as a matrix
-    target_matrix = np.array([[1., 0., 0., 0.],
-                              [0., 1., 0., 0.],
-                              [0., 0., 1., 0.],
-                              [0., 0., 0., -1.]])
     # target_matrix = np.array([[1., 0., 0., 0.],
     #                           [0., 1., 0., 0.],
     #                           [0., 0., 1., 0.],
@@ -18,6 +15,10 @@ if __name__ == '__main__':
     #                           [0., 0., 0., 0.],
     #                           [0., 0., 0., 0.],
     #                           [0., 0., 0., 0.]])
+    target_matrix = np.array([[1., 0., 0., 0.],
+                              [0., 1., 0., 0.],
+                              [0., 0., 1., 0.],
+                              [0., 0., 0., -1.]])
 
     # State modes:
     # (3)----------
@@ -43,23 +44,26 @@ if __name__ == '__main__':
     # (1)----------
     # (0)----------
     ancilla_state = np.array([0])
-    measurements = np.array([[0]])
+
+    measurements = AnyNode(pattern=[])
+    n1 = AnyNode(pattern=[0, 0, 1], parent=measurements)
 
     # Create an instance of search
-    search = CircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=3, measurements=measurements,
-                           ancilla_state=ancilla_state, topology=tl.Parallel,
-                           device='cpu')
-    # search = CircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=3, measurements=measurements,
-    #                        ancilla_state=ancilla_state, output_basic_states=output_basic_states, topology=tl.Parallel,
-    #                        device='cpu')
+    search = CorrectionCircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=3,
+                                     measurements=measurements, ancilla_state=ancilla_state,
+                                     topology=tl.Parallel, device='cpu')
+    # search = CorrectionCircuitSearch(target_matrix, input_basic_states, n_ancilla_modes=2,
+    #                                  measurements=measurements, ancilla_state=ancilla_state,
+    #                                  output_basic_states=output_basic_states, topology=tl.Parallel, device='cpu')
+
+    # print(len([x for x in search.parameters()]))
 
     # Launch the search!
-    circuit = search.run(min_probability=0.15, n_epochs=1000, print_info=True)
-    # circuit = search.run(min_probability=2 / 27, n_epochs=2000, print_info=True)
+    circuit = search.run(min_probability=2 / 27, n_epochs=2000, print_info=True)
 
     # Print result
     print("Circuit:")
     circuit.print()
 
     # Save result
-    circuit.to_loqc_tech("result.json")
+    # circuit.to_loqc_tech("result.json")
